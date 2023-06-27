@@ -18,6 +18,7 @@ class _HomePageState extends State<HomePage> {
     "PLC address": [],
     "Controller function name": [],
     "Function code": [],
+    "Data type": [],
   };
 
   void filter(List filterList) {
@@ -116,11 +117,13 @@ class _HomePageState extends State<HomePage> {
         sheet.removeRow(0);
       }
 
+      //Convert sheets to maps
       Map discreteOutputMap = createMapFromSheet(sheets[0]);
       Map discreteInputMap = createMapFromSheet(sheets[1]);
       Map holdingRegisterMap = createMapFromSheet(sheets[2]);
       Map inputRegisterMap = createMapFromSheet(sheets[3]);
 
+      //Add function code
       discreteOutputMap["Function code"] =
           List.filled(discreteOutputMap["PLC address"]!.length, "F01");
       discreteInputMap["Function code"] =
@@ -130,11 +133,29 @@ class _HomePageState extends State<HomePage> {
       inputRegisterMap["Function code"] =
           List.filled(inputRegisterMap["PLC address"]!.length, "F04");
 
+      //Add data type to INP ond OUTP
+      discreteOutputMap["Data type"] =
+          List.filled(discreteOutputMap["PLC address"]!.length, "BOOL");
+      discreteInputMap["Data type"] =
+          List.filled(discreteInputMap["PLC address"]!.length, "BOOL");
+
       viewMap.forEach((key, value) {
-        value.addAll(discreteOutputMap[key]);
-        value.addAll(discreteInputMap[key]);
-        value.addAll(holdingRegisterMap[key]);
-        value.addAll(inputRegisterMap[key]);
+        if (discreteOutputMap[key] != null) {
+          value.addAll(discreteOutputMap[key]);
+        }
+        if (discreteInputMap[key] != null) {
+          value.addAll(discreteInputMap[key]);
+        }
+        if (holdingRegisterMap[key] != null) {
+          value.addAll(holdingRegisterMap[key]);
+        }
+        if (inputRegisterMap[key] != null) {
+          value.addAll(inputRegisterMap[key]);
+        }
+
+        //value.addAll(discreteInputMap[key]);
+        //value.addAll(holdingRegisterMap[key]);
+        //value.addAll(inputRegisterMap[key]);
       });
 
       viewMap["Selected"] =
@@ -142,7 +163,6 @@ class _HomePageState extends State<HomePage> {
       viewMap["Filtered"] =
           List.filled(viewMap["Function group"]!.length, true);
 
-      //viewMap = Map.from(viewMap);
       setState(() {});
     }
   }
@@ -265,6 +285,10 @@ class _HomePageState extends State<HomePage> {
                               child: Text(
                                   viewMap["Controller function name"]![index]
                                       .toString())),
+                          SizedBox(
+                              width: 100,
+                              child: Text(
+                                  viewMap["Data type"]![index].toString())),
                           SizedBox(
                               width: 50,
                               child: Icon(viewMap["Selected"]![index]

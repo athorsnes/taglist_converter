@@ -1,32 +1,79 @@
+//add subindex
+
 String xmlString(Map<String, List> map) {
   String myXmlString = "<tags>\n\t";
   String xmlEnd = "</tags>";
   for (var i = 0; i < map["Controller function name"]!.length; i++) {
     String tagname = map["Controller function name"]![i];
+    tagname = tagname.replaceAll('>', '&gt;');
+    tagname = tagname.replaceAll('<', '&lt;');
+    tagname = tagname.replaceAll('°', 'degrees');
+    tagname = tagname.replaceAll('.', ',');
     String offset = map["PLC address"]![i];
     String comment = map["Function group"]![i];
     String dataType = "";
     String memoryType = "";
+    String readWriteAccess = "READ-WRITE";
+
+    String maxVal = "";
+    String minVal = "";
 
     switch (map["Function code"]![i]) {
       case "F01":
         memoryType = "OUTP";
-        dataType = "boolean";
+        break;
+      case "F02":
+        memoryType = "INP";
+        readWriteAccess = "READ";
+        break;
+      case "F03":
+        memoryType = "HREG";
+        break;
+      case "F04":
+        memoryType = "IREG";
+        readWriteAccess = "READ";
+        break;
+      default:
+    }
+
+    switch (map["Function group"]![i]) {
+      case "Command flag" || "Control command":
+        readWriteAccess = "WRITE";
         break;
       case "F02":
         memoryType = "INP";
         dataType = "boolean";
         break;
-      case "F03":
-        memoryType = "HREG";
-        dataType = "short";
+
+      default:
+        readWriteAccess = "READ-WRITE";
+    }
+
+    switch (map["Data type"]![i]) {
+      case "BOOL":
+        dataType = "boolean";
+        minVal = "0";
+        maxVal = "1";
         break;
-      case "F04":
-        memoryType = "IREG";
+      case "INT8u" || "INT16u" || "INT32u":
+        dataType = "unsignedShort";
+        minVal = "0";
+        maxVal = "65535";
+        break;
+      case "INT16s" || "INT16" || "INT32s" || "INT32":
         dataType = "short";
+        minVal = "-32768";
+        maxVal = "32767";
+        break;
+      case "FLOAT":
+        dataType = "float";
+        minVal = "-3.40282e+38";
+        maxVal = "3.40282e+38";
         break;
       default:
+        readWriteAccess = "READ-WRITE";
     }
+
     String xml = '''<tag>
   <name>$tagname</name>
   <group></group>
@@ -77,8 +124,8 @@ String xmlString(Map<String, List> map) {
   </decimalDigits>
   <castType></castType>
   <default></default>
-  <min>0</min>
-  <max>1</max>
+  <min>$minVal</min>
+  <max>$maxVal</max>
   <statesText></statesText>
 </tag>\n''';
 
