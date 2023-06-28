@@ -10,6 +10,8 @@ String xmlString(Map<String, List> map) {
     tagname = tagname.replaceAll('°', 'degrees');
     tagname = tagname.replaceAll('.', ',');
     String offset = map["PLC address"]![i];
+    String subindex =
+        map["Bit"]![i].toString().isNotEmpty ? map["Bit"]![i] : "";
     String comment = map["Function group"]![i];
     String dataType = "";
     String memoryType = "";
@@ -17,6 +19,18 @@ String xmlString(Map<String, List> map) {
 
     String maxVal = "";
     String minVal = "";
+
+    switch (map["Function group"]![i]) {
+      case "Command flag" || "Control command":
+        readWriteAccess = "WRITE";
+        break;
+      case "Digital input" || "Digital output" || "Status flag":
+        readWriteAccess = "READ";
+        break;
+
+      default:
+        readWriteAccess = "READ-WRITE";
+    }
 
     switch (map["Function code"]![i]) {
       case "F01":
@@ -36,42 +50,39 @@ String xmlString(Map<String, List> map) {
       default:
     }
 
-    switch (map["Function group"]![i]) {
-      case "Command flag" || "Control command":
-        readWriteAccess = "WRITE";
-        break;
-      case "F02":
-        memoryType = "INP";
-        dataType = "boolean";
-        break;
-
-      default:
-        readWriteAccess = "READ-WRITE";
-    }
-
     switch (map["Data type"]![i]) {
       case "BOOL":
         dataType = "boolean";
         minVal = "0";
         maxVal = "1";
         break;
-      case "INT8u" || "INT16u" || "INT32u":
+      case "INT8u" || "INT16u":
         dataType = "unsignedShort";
         minVal = "0";
         maxVal = "65535";
         break;
-      case "INT16s" || "INT16" || "INT32s" || "INT32":
+      case "INT16" || "INT16s":
         dataType = "short";
         minVal = "-32768";
         maxVal = "32767";
         break;
+
+      case "INT32" || "INT32s":
+        dataType = "int";
+        minVal = "-2.1e+9";
+        maxVal = "2.1e+9";
+        break;
+      case "INT32u":
+        dataType = "unsignedInt";
+        minVal = "0";
+        maxVal = "4.2e+9";
+        break;
       case "FLOAT":
         dataType = "float";
-        minVal = "-3.40282e+38";
+        minVal =
+            "-3.40282e+38"; //1.17e-38 in AGI user manual -3.40282e+38 in AGI Creator
         maxVal = "3.40282e+38";
         break;
-      default:
-        readWriteAccess = "READ-WRITE";
     }
 
     String xml = '''<tag>
@@ -82,14 +93,14 @@ String xmlString(Map<String, List> map) {
     <node_id></node_id>
     <memory_type>$memoryType</memory_type>
     <offset>$offset</offset>
-    <subindex></subindex>
+    <subindex>$subindex</subindex>
     <data_type>$dataType</data_type>
     <arraysize></arraysize>
     <conversion></conversion>
   </resourceLocator>
   <encoding></encoding>
   <refreshTime>500</refreshTime>
-  <accessMode>READ-WRITE</accessMode>
+  <accessMode>$readWriteAccess</accessMode>
   <active>false</active>
   <TAGLOCATOR></TAGLOCATOR>
   <comment>$comment</comment>
