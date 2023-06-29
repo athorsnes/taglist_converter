@@ -9,6 +9,8 @@ String xmlString(Map<String, List> map) {
     tagname = tagname.replaceAll('<', '&lt;');
     tagname = tagname.replaceAll('°', 'degrees');
     tagname = tagname.replaceAll('.', ',');
+    tagname = tagname.replaceAll('&', '&#38;');
+    tagname += " -" + map["Function code"]![i];
     String offset = map["PLC address"]![i];
     String subindex =
         map["Bit"]![i].toString().isNotEmpty ? map["Bit"]![i] : "";
