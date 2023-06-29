@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' as exc;
 import 'package:taglist_converter/backend/test.dart';
 
 class HomePage extends StatefulWidget {
@@ -31,12 +31,12 @@ class _HomePageState extends State<HomePage> {
   };
 
   Map columnWidths = {
-    "Function group": 150.0,
-    "PLC address": 100.0,
-    "Bit": 40.0,
+    "Function group": 200.0,
+    "PLC address": 150.0,
+    "Bit": 70.0,
     "Controller function name": 500.0,
-    "Function code": 100.0,
-    "Data type": 100.0,
+    //"Function code": 100.0,
+    "Data type": 130.0,
   };
 
   List possibleControllerTypes = [
@@ -55,13 +55,28 @@ class _HomePageState extends State<HomePage> {
   ];
   List detectedControllerTypes = [];
   String activeController = "";
+  bool crossUpdate = false;
+  bool crossUpdateOld = false;
+
+  bool searchActive = false;
 
   void filter(List filterList) {
-    List tempList = List.filled(viewMap["Function group"]!.length, true);
-    filterList.forEach((element) {
-      tempList[element] = false;
-    });
+    List tempList = List.filled(viewMap["Function group"]!.length, false);
+    for (var element in filterList) {
+      tempList[element] = true;
+    }
     viewMap["Filtered"] = tempList;
+    //crossUpdate = !crossUpdate;
+
+    setState(() {});
+  }
+
+  void search(List searchList) {
+    List tempList = List.filled(viewMap["Function group"]!.length, false);
+    for (var element in searchList) {
+      tempList[element] = true;
+    }
+    viewMap["Searched"] = tempList;
 
     setState(() {});
   }
@@ -123,7 +138,9 @@ class _HomePageState extends State<HomePage> {
 
   void selectAllVisible() {
     for (var i = 0; i < viewMap["Filtered"]!.length; i++) {
-      if (viewMap["Filtered"]![i] && viewMap[activeController]![i] == "X") {
+      if (viewMap["Filtered"]![i] &&
+          viewMap["Searched"]![i] &&
+          viewMap[activeController]![i] == "X") {
         viewMap["Selected"]![i] = true;
       }
     }
@@ -131,7 +148,9 @@ class _HomePageState extends State<HomePage> {
 
   void deselectAllVisible() {
     for (var i = 0; i < viewMap["Filtered"]!.length; i++) {
-      if (viewMap["Filtered"]![i]) {
+      if (viewMap["Filtered"]![i] &&
+          viewMap["Searched"]![i] &&
+          viewMap[activeController]![i] == "X") {
         viewMap["Selected"]![i] = false;
       }
     }
@@ -163,6 +182,16 @@ class _HomePageState extends State<HomePage> {
     return selectedAndAvaliableList.where((element) => element == true).length;
   }
 
+  bool shouldBeVisible(int index) {
+    if (viewMap["Filtered"]![index] &&
+        (viewMap[activeController]![index] == "X") &&
+        (viewMap["Searched"]![index])) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   Future<void> _selectFile() async {
     viewMap = Map.from(baseMap);
     final result = await FilePicker.platform.pickFiles(
@@ -171,14 +200,25 @@ class _HomePageState extends State<HomePage> {
     );
     if (result != null) {
       var bytes = File(result.paths[0]!).readAsBytesSync();
-      var excel = Excel.decodeBytes(bytes);
+      var excel = exc.Excel.decodeBytes(bytes);
 
-      List<Sheet> sheets = excel.tables.values.toList()..removeAt(0);
+      List<exc.Sheet> sheets = excel.tables.values.toList()..removeAt(0);
 
       for (var sheet in sheets) {
         sheet.removeRow(0);
         sheet.removeRow(0);
         sheet.removeRow(0);
+        //Clean up empty rows
+
+        sheet.removeRow(sheet.maxRows - 1);
+        sheet.removeRow(sheet.maxRows - 1);
+        sheet.removeRow(sheet.maxRows - 1);
+        /*
+        sheet.rows.asMap().forEach((index, row) {
+          if (row[0]?.value == null) {
+            sheet.removeRow(index);
+          }
+        });*/
       }
 
       //Convert sheets to maps
@@ -219,8 +259,16 @@ class _HomePageState extends State<HomePage> {
       discreteInputMap["Bit"] =
           List.filled(discreteInputMap["PLC address"]!.length, "");
 
+      //Add detected controller types as keys in viewMap
       for (String element in detectedControllerTypes) {
         viewMap[element] = [];
+      }
+
+      //for loop that prints index of any element in each value of discreteInputMap that is null
+      for (var i = 0; i < discreteInputMap.values.first.length; i++) {
+        if (discreteInputMap.values.first.elementAt(i) == null) {
+          print(i);
+        }
       }
 
       viewMap.forEach((key, value) {
@@ -242,6 +290,8 @@ class _HomePageState extends State<HomePage> {
           List.filled(viewMap["Function group"]!.length, false);
       viewMap["Filtered"] =
           List.filled(viewMap["Function group"]!.length, true);
+      viewMap["Searched"] =
+          List.filled(viewMap["Function group"]!.length, true);
 
       setState(() {});
     }
@@ -257,7 +307,7 @@ class _HomePageState extends State<HomePage> {
             Text(viewMap["Selected"] != null
                 ? lengthOfSelectedAndAvaiable().toString()
                 : "0"),
-            Icon(Icons.download),
+            const Icon(Icons.download),
           ],
         ),
       ),
@@ -274,9 +324,15 @@ class _HomePageState extends State<HomePage> {
                         value: _selectFile,
                         child: const Text('Open modbus list')),
                     PopupMenuItem(
-                        value: _saveAsJson, child: const Text('Save Json')),
+                        enabled: false,
+                        height: 2,
+                        child: PopupMenuDivider(height: 2)),
                     PopupMenuItem(
-                        value: _readFromJson, child: const Text('Load Json')),
+                        value: _saveAsJson,
+                        child: const Text('Save setup as Json')),
+                    PopupMenuItem(
+                        value: _readFromJson,
+                        child: const Text('Load setup from Json')),
                   ]).then((value) {
                 if (value != null) {
                   value();
@@ -301,136 +357,164 @@ class _HomePageState extends State<HomePage> {
           ListTile(
             dense: true,
             title: Row(
+                //mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.start,
                 children: viewMap.entries.map((entry) {
-              Widget sizedBox = Visibility(
-                visible: switch (entry.key) {
-                  "Function group" => true,
-                  "PLC address" => true,
-                  "Bit" => true,
-                  "Controller function name" => true,
-                  "Function code" => false,
-                  "Data type" => true,
-                  "Selected" => true,
-                  String() => false
-                },
-                child: SizedBox(
-                  width: columnWidths[entry.key],
-                  child: Row(children: [
-                    Text(entry.key),
-                    entry.key == "Function group"
-                        ? IconButton(
-                            icon: Icon(Icons.filter_list),
-                            onPressed: () {
-                              List filterList = List.from(entry.value);
-                              filterList.removeWhere((value) => value == null);
-                              filterList = filterList.toSet().toList()
-                                ..insert(0, "Show all");
-                              if (filterList.isEmpty) {
-                                return;
-                              }
-                              showMenu(
-                                      context: context,
-                                      position:
-                                          RelativeRect.fromLTRB(0, 0, 0, 0),
-                                      items: filterList.map((e) {
-                                        return PopupMenuItem(
-                                            value: e,
-                                            child: Text(
-                                                e != null ? e.toString() : ""));
-                                      }).toList())
-                                  .then((value) {
-                                if (value != null) {
-                                  if (value == "Show all") {
-                                    viewMap["Filtered"] = List.filled(
-                                        viewMap["Function group"]!.length,
-                                        true);
-                                    setState(() {});
+                  Widget sizedBox = Visibility(
+                    visible: switch (entry.key) {
+                      "Function group" => true,
+                      "PLC address" => true,
+                      "Bit" => true,
+                      "Controller function name" => true,
+                      "Function code" => false,
+                      "Data type" => true,
+                      "Selected" => true,
+                      String() => false
+                    },
+                    child: SizedBox(
+                      width: columnWidths[entry.key],
+                      //height: 48,
+                      child: ListTile(
+                          dense: true,
+                          //mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          title: Text(entry.key),
+                          trailing: switch (entry.key) {
+                            "Function group" => IconButton(
+                                icon: Icon(Icons.filter_list),
+                                onPressed: () {
+                                  List filterList = List.from(entry.value);
+                                  filterList
+                                      .removeWhere((value) => value == null);
+                                  filterList = filterList.toSet().toList()
+                                    ..insert(0, "Show all");
+                                  if (filterList.isEmpty) {
                                     return;
                                   }
-                                  filter(indexFilter(viewMap, "Function group",
-                                      value.toString()));
-                                  setState(() {});
-                                } else {
-                                  return;
-                                }
-                              });
-                            })
-                        : SizedBox.shrink(),
-                    entry.key == "Selected"
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Tooltip(
-                                message: "Select all in list",
-                                child: IconButton(
-                                    visualDensity: VisualDensity.compact,
-                                    icon: Icon(Icons.check_box),
-                                    onPressed: () {
-                                      selectAllVisible();
+                                  showMenu(
+                                          context: context,
+                                          position:
+                                              RelativeRect.fromLTRB(0, 0, 0, 0),
+                                          items: filterList.map((e) {
+                                            return PopupMenuItem(
+                                                value: e,
+                                                child: Text(e != null
+                                                    ? e.toString()
+                                                    : ""));
+                                          }).toList())
+                                      .then((value) {
+                                    if (value != null) {
+                                      if (value == "Show all") {
+                                        viewMap["Filtered"] = List.filled(
+                                            viewMap["Function group"]!.length,
+                                            true);
+                                        setState(() {});
+                                        return;
+                                      }
+                                      filter(indexFilter(viewMap,
+                                          "Function group", value.toString()));
                                       setState(() {});
+                                    } else {
+                                      return;
+                                    }
+                                  });
+                                }),
+                            "Controller function name" => IconButton(
+                                onPressed: () => setState(() {
+                                      searchActive = true;
                                     }),
+                                icon: Icon(Icons.search)),
+                            "Selected" => Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Tooltip(
+                                    message: "Select all in list",
+                                    child: IconButton(
+                                        visualDensity: VisualDensity.compact,
+                                        icon: Icon(Icons.check_box),
+                                        onPressed: () {
+                                          selectAllVisible();
+                                          setState(() {});
+                                        }),
+                                  ),
+                                  Tooltip(
+                                    message: "Deselect all in list",
+                                    child: IconButton(
+                                        visualDensity: VisualDensity.compact,
+                                        icon:
+                                            Icon(Icons.indeterminate_check_box),
+                                        onPressed: () {
+                                          deselectAllVisible();
+                                          setState(() {});
+                                        }),
+                                  ),
+                                ],
                               ),
-                              Tooltip(
-                                message: "Deselect all in list",
-                                child: IconButton(
-                                    visualDensity: VisualDensity.compact,
-                                    icon: Icon(Icons.indeterminate_check_box),
-                                    onPressed: () {
-                                      deselectAllVisible();
-                                      setState(() {});
-                                    }),
-                              ),
-                            ],
-                          )
-                        : SizedBox.shrink()
-                  ]),
-                ),
-              );
-              return sizedBox;
-            }).toList()),
+                            String() => null
+                          }),
+                    ),
+                  );
+                  return sizedBox;
+                }).toList()),
           ),
+          /*
+          searchActive
+              ? ListTile(
+                  dense: true,
+                  leading: IconButton(
+                      onPressed: () => setState(() {
+                            search(indexSearch(
+                                viewMap, "Controller function name", ""));
+                            searchActive = false;
+                          }),
+                      icon: Icon(Icons.close)),
+                  title: TextField(onChanged: (value) {
+                    search(indexSearch(
+                        viewMap, "Controller function name", value));
+                  }),
+                )
+              : SizedBox.shrink(),*/
           Expanded(
             child: ListView.builder(
               itemCount: viewMap.values.first.length,
               itemBuilder: (context, index) {
                 return Visibility(
-                  visible: viewMap["Filtered"]![index] &&
-                      (viewMap[activeController]![index] == "X"),
+                  visible: shouldBeVisible(index),
                   child: Card(
                     color: viewMap["Selected"]![index]
                         ? Colors.green[100]
                         : Colors.white,
                     child: ListTile(
-                      //selected: widget.data[5],
                       dense: true,
-                      title: Row(
-                        children: [
-                          SizedBox(
-                              width: columnWidths["Function group"],
-                              child: Text(viewMap["Function group"]![index]
-                                  .toString())),
-                          SizedBox(
-                              width: columnWidths["PLC address"],
-                              child: Text(
-                                  viewMap["PLC address"]![index].toString())),
-                          SizedBox(
-                              width: columnWidths["Bit"],
-                              child: Text(viewMap["Bit"]![index].toString())),
-                          SizedBox(
-                              width: columnWidths["Controller function name"],
-                              child: Text(
-                                  viewMap["Controller function name"]![index]
-                                      .toString())),
-                          SizedBox(
-                              width: columnWidths["Data type"],
-                              child: Text(
-                                  viewMap["Data type"]![index].toString())),
-                          SizedBox(
-                              width: columnWidths["Selected"],
-                              child: Icon(viewMap["Selected"]![index]
-                                  ? Icons.check_box
-                                  : Icons.indeterminate_check_box)),
-                        ],
+                      title: Expanded(
+                        child: Row(
+                          children: [
+                            SizedBox(
+                                width: columnWidths["Function group"],
+                                child: Text(viewMap["Function group"]![index]
+                                    .toString())),
+                            SizedBox(
+                                width: columnWidths["PLC address"],
+                                child: Text(
+                                    viewMap["PLC address"]![index].toString())),
+                            SizedBox(
+                                width: columnWidths["Bit"],
+                                child: Text(viewMap["Bit"]![index].toString())),
+                            SizedBox(
+                                width: columnWidths["Controller function name"],
+                                child: Text(
+                                    viewMap["Controller function name"]![index]
+                                        .toString())),
+                            SizedBox(
+                                width: columnWidths["Data type"],
+                                child: Text(
+                                    viewMap["Data type"]![index].toString())),
+                            SizedBox(
+                                width: columnWidths["Selected"],
+                                child: Icon(viewMap["Selected"]![index]
+                                    ? Icons.check_box
+                                    : Icons.indeterminate_check_box)),
+                          ],
+                        ),
                       ),
                       onTap: () {
                         viewMap["Selected"]![index] =
@@ -450,11 +534,11 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-Map createMapFromSheet(Sheet sheet) {
+Map createMapFromSheet(exc.Sheet sheet) {
   Map sheetMap = {};
   for (var i = 0; i < sheet.maxCols; i++) {
     sheetMap[sheet
-        .cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0))
+        .cell(exc.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0))
         .value
         .toString()] = sheet.rows.map((e) => e[i]?.value.toString()).toList()
       ..removeAt(0);
@@ -465,9 +549,22 @@ Map createMapFromSheet(Sheet sheet) {
 List indexFilter(Map map, String keyToFilter, var filter) {
   List indexFilter = [];
   for (var i = 0; i < map[keyToFilter]!.length; i++) {
-    if (map[keyToFilter]![i] != filter) {
+    if (map[keyToFilter]![i] == filter) {
       indexFilter.add(i);
     }
   }
   return indexFilter;
+}
+
+List indexSearch(Map map, String keyToSearch, var search) {
+  if (search == "") {
+    return List.generate(map[keyToSearch]!.length, (index) => index);
+  }
+  List indexSearch = [];
+  for (var i = 0; i < map[keyToSearch]!.length; i++) {
+    if (map[keyToSearch]?[i].toLowerCase().contains(search.toLowerCase())) {
+      indexSearch.add(i);
+    }
+  }
+  return indexSearch;
 }
