@@ -158,7 +158,7 @@ class _HomePageState extends State<HomePage> {
       Map<String, List> finalMap =
           filteredMap(viewMap, indexFilter(viewMap, "Selected", true));
 
-      file.writeAsString(xmlString(finalMap));
+      file.writeAsString(xmlString(finalMap, zeroBased));
     }
   }
 
