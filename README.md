@@ -2,9 +2,11 @@
 
 A program to convert DEIF taglists to importable XML for AGI Creator
 
+Currently in alpha
+
 # USAGE
 
-1. Download betaRelease.zip
+1. Download alphaRelease.zip
 
 2. Extract content somewhere on your PC
 

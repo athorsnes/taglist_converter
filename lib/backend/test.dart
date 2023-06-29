@@ -1,6 +1,6 @@
 //add subindex
 
-String xmlString(Map<String, List> map) {
+String xmlString(Map<String, List> map, bool isZeroBased) {
   String myXmlString = "<tags>\n\t";
   String xmlEnd = "</tags>";
   for (var i = 0; i < map["Controller function name"]!.length; i++) {
@@ -9,7 +9,11 @@ String xmlString(Map<String, List> map) {
     tagname = tagname.replaceAll('<', '&lt;');
     tagname = tagname.replaceAll('°', 'degrees');
     tagname = tagname.replaceAll('.', ',');
-    String offset = map["PLC address"]![i];
+    tagname = tagname.replaceAll('&', '&#38;');
+    tagname += " -${map["Function code"]![i]}";
+    String offset = isZeroBased
+        ? (int.parse(map["PLC address"]![i]) - 1).toString()
+        : map["PLC address"]![i];
     String subindex =
         map["Bit"]![i].toString().isNotEmpty ? map["Bit"]![i] : "";
     String comment = map["Function group"]![i];
