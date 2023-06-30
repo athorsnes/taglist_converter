@@ -42,7 +42,7 @@ In the menu, you can
 When you have loaded a modbus list, or Json file, the following happens:
 + the file is scanned for controller types, and all that are found will be displayed just below the app bar. In this case controller types BTB, MAINS and DG are found. These can be switched between, depending on what controller-type you are generating tags for.
 + All tags in the list that exist for the chosen controller type will be displayed in a scrollable list. Pressing a list item will add it to your selected tags. 
-+ You can filter on "Function group" and "Data type". The filters combine, but do might give zero result when used together. 
++ You can filter on "Function group" and "Data type". The filters can be combined, but might give zero results when used together. 
 + You can search in "Controller function name". This search is applied in addition the an active filter. 
 + You can use the buttons next to "Selected" to select or deselect all tags currently in the list.
 
