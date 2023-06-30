@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' as exc;
@@ -14,6 +15,25 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  final Map<String, String> deifLinks = {
+    "AGC-4 MKII":
+        "https://deif-cdn-umbraco.azureedge.net/media/shjn54mw/agc-4-mk-ii-modbus-tables-4189341272-uk.xlsx",
+    "AGC-4":
+        "https://deif-cdn-umbraco.azureedge.net/media/xywdqum0/agc-4-modbus-tables-4189341215-uk.xlsx",
+    "ASC-4":
+        "https://deif-cdn-umbraco.azureedge.net/media/va3b0mah/asc-4-modbus-server-tables-4189341284-uk.xlsx",
+    "ALC-4":
+        "https://deif-cdn-umbraco.azureedge.net/media/qyeogmjx/alc-4-modbus-tables-4189341283-uk.xlsx",
+    "AGC 150":
+        "https://deif-cdn-umbraco.azureedge.net/media/f2hiadel/agc-150-modbus-server-tables-4189341212-uk.xlsx",
+    "ASC 150":
+        "https://deif-cdn-umbraco.azureedge.net/media/qzbo5thj/asc-150-modbus-server-tables-4189341324-uk.xlsx",
+    "PPM 300":
+        "https://deif-cdn-umbraco.azureedge.net/media/zizlfabe/ppm-300-modbus-tables-4189341079-uk.xlsx",
+    "PPU 300":
+        "https://deif-cdn-umbraco.azureedge.net/media/wfcn3snq/ppu-300-modbus-tables-4189341101-uk.xlsx",
+  };
+
   final Map<String, List> baseMap = {
     "Function group": [],
     "PLC address": [],
@@ -59,23 +79,37 @@ class _HomePageState extends State<HomePage> {
   ];
   List detectedControllerTypes = [];
   String activeController = "";
-  bool crossUpdate = false;
-  bool crossUpdateOld = false;
   bool zeroBased = false;
-
   bool searchActive = false;
 
+  bool mapLoaded = false;
+  int listLength = 0;
+
+  //TESTING
+  String searchString = "";
+  String dataTypeFilter = "";
+  String functionGroupFilter = "";
+
+  void _resetFiltersAndSearch() {
+    searchString = "";
+    dataTypeFilter = "";
+    functionGroupFilter = "";
+  }
+
   void _closeCurrentSetup() {
+    mapLoaded = false;
+    viewMap = Map.fromIterables(baseMap.keys, baseMap.values);
+    /*
     for (var key in viewMap.keys) {
       viewMap[key] = [];
     }
-    /*
+    
     for(int i=0; i> viewMap.values.length; i++){
       viewMap.values[i] = [];
     }*/
     detectedControllerTypes = [];
     activeController = "";
-    setState(() {});
+    _resetFiltersAndSearch();
   }
 
   void _toggleZeroOneBased() {
@@ -83,13 +117,13 @@ class _HomePageState extends State<HomePage> {
     setState(() {});
   }
 
+  /*
   void _filter(List filterList) {
     List tempList = List.filled(viewMap["Function group"]!.length, false);
     for (var element in filterList) {
       tempList[element] = true;
     }
     viewMap["Filtered"] = tempList;
-    //crossUpdate = !crossUpdate;
 
     setState(() {});
   }
@@ -103,15 +137,15 @@ class _HomePageState extends State<HomePage> {
 
     setState(() {});
   }
-
+*/
   Map<String, List> filteredMap(Map map, List filterList) {
     Map<String, List> tempMap = Map.from(map);
 
     tempMap.forEach((key, value) {
       List tempList = [];
-      filterList.forEach((element) {
+      for (var element in filterList) {
         tempList.add(value[element]);
-      });
+      }
       tempMap[key] = tempList;
     });
     return tempMap;
@@ -134,6 +168,7 @@ class _HomePageState extends State<HomePage> {
       allowedExtensions: ['json'],
     );
     if (result != null) {
+      _closeCurrentSetup();
       var bytes = File(result.paths[0]!).readAsBytesSync();
       String jsonString = String.fromCharCodes(bytes);
       Map jsonMap = jsonDecode(jsonString);
@@ -144,6 +179,10 @@ class _HomePageState extends State<HomePage> {
       viewMap = Map.from(jsonMap);
       detectedControllerTypes = controllersInViewMap();
       activeController = detectedControllerTypes[0];
+      if (viewMap.values.first.isNotEmpty) {
+        listLength = viewMap.values.first.length;
+        mapLoaded = true;
+      }
       setState(() {});
     }
   }
@@ -168,7 +207,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _showFilterMenu(entrykey, entryValue) {
+  void _showFilterMenu(entrykey, entryValue, TapDownDetails details) {
     List filterList = List.from(entryValue);
     filterList.removeWhere((value) => value == null);
     filterList = filterList.toSet().toList()..insert(0, "Show all");
@@ -177,7 +216,11 @@ class _HomePageState extends State<HomePage> {
     }
     showMenu(
             context: context,
-            position: RelativeRect.fromLTRB(0, 0, 0, 0),
+            position: RelativeRect.fromLTRB(
+                details.globalPosition.dx,
+                details.globalPosition.dy,
+                details.globalPosition.dx,
+                details.globalPosition.dy),
             items: filterList.map((e) {
               return PopupMenuItem(
                   value: e, child: Text(e != null ? e.toString() : ""));
@@ -185,11 +228,21 @@ class _HomePageState extends State<HomePage> {
         .then((value) {
       if (value != null) {
         if (value == "Show all") {
-          viewMap["Filtered"] = List.filled(viewMap[entrykey]!.length, true);
+          //viewMap["Filtered"] = List.filled(viewMap[entrykey]!.length, true);
+          if (entrykey == "Data type") {
+            dataTypeFilter = "";
+          } else if (entrykey == "Function group") {
+            functionGroupFilter = "";
+          }
           setState(() {});
           return;
         }
-        _filter(indexFilter(viewMap, entrykey, value.toString()));
+        //_filter(indexFilter(viewMap, entrykey, value.toString()));
+        if (entrykey == "Data type") {
+          dataTypeFilter = value.toString();
+        } else if (entrykey == "Function group") {
+          functionGroupFilter = value.toString();
+        }
         setState(() {});
       } else {
         return;
@@ -198,20 +251,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _selectAllVisible() {
-    for (var i = 0; i < viewMap["Filtered"]!.length; i++) {
-      if (viewMap["Filtered"]![i] &&
-          viewMap["Searched"]![i] &&
-          viewMap[activeController]![i] == "X") {
+    for (var i = 0; i < viewMap.values.first.length; i++) {
+      if (shouldBeVisible(i)) {
         viewMap["Selected"]![i] = true;
       }
     }
   }
 
   void _deselectAllVisible() {
-    for (var i = 0; i < viewMap["Filtered"]!.length; i++) {
-      if (viewMap["Filtered"]![i] &&
-          viewMap["Searched"]![i] &&
-          viewMap[activeController]![i] == "X") {
+    for (var i = 0; i < viewMap.values.first.length; i++) {
+      if (shouldBeVisible(i)) {
         viewMap["Selected"]![i] = false;
       }
     }
@@ -244,6 +293,38 @@ class _HomePageState extends State<HomePage> {
   }
 
   bool shouldBeVisible(int index) {
+    bool searchHit = true;
+    bool dataTypeMatch = false;
+    bool functionGroupMatch = false;
+    bool controllerMatch = false;
+
+    if (searchString != "" &&
+        !viewMap["Controller function name"]![index]
+            .toLowerCase()
+            .contains(searchString.toLowerCase())) {
+      searchHit = false;
+    }
+    if (dataTypeFilter == "" ||
+        viewMap["Data type"]![index] == dataTypeFilter) {
+      dataTypeMatch = true;
+    }
+    if (functionGroupFilter == "" ||
+        viewMap["Function group"]![index] == functionGroupFilter) {
+      functionGroupMatch = true;
+    }
+
+    if (viewMap[activeController]![index] == "X") {
+      controllerMatch = true;
+    }
+
+    if (searchHit && dataTypeMatch && functionGroupMatch && controllerMatch) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  bool shouldBeVisibleOriginal(int index) {
     if (viewMap["Filtered"]![index] &&
         (viewMap[activeController]![index] == "X") &&
         (viewMap["Searched"]![index])) {
@@ -254,32 +335,25 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _selectFile() async {
-    viewMap = Map.fromIterables(baseMap.keys, baseMap.values);
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['xlsx'],
     );
     if (result != null) {
-      var bytes = File(result.paths[0]!).readAsBytesSync();
-      var excel = exc.Excel.decodeBytes(bytes);
-
+      _closeCurrentSetup();
+      Uint8List bytes = File(result.paths[0]!).readAsBytesSync();
+      exc.Excel excel = exc.Excel.decodeBytes(bytes);
       List<exc.Sheet> sheets = excel.tables.values.toList()..removeAt(0);
 
       for (var sheet in sheets) {
+        //Remove header rows
         sheet.removeRow(0);
         sheet.removeRow(0);
         sheet.removeRow(0);
-        //Clean up empty rows
-
+        //Clean up empty rows at the end that appear when deleting header rows
         sheet.removeRow(sheet.maxRows - 1);
         sheet.removeRow(sheet.maxRows - 1);
         sheet.removeRow(sheet.maxRows - 1);
-        /*
-        sheet.rows.asMap().forEach((index, row) {
-          if (row[0]?.value == null) {
-            sheet.removeRow(index);
-          }
-        });*/
       }
 
       //Convert sheets to maps
@@ -325,13 +399,6 @@ class _HomePageState extends State<HomePage> {
         viewMap[element] = [];
       }
 
-      //for loop that prints index of any element in each value of discreteInputMap that is null
-      for (var i = 0; i < discreteInputMap.values.first.length; i++) {
-        if (discreteInputMap.values.first.elementAt(i) == null) {
-          print(i);
-        }
-      }
-
       viewMap.forEach((key, value) {
         if (discreteOutputMap[key] != null) {
           value.addAll(discreteOutputMap[key]);
@@ -354,6 +421,10 @@ class _HomePageState extends State<HomePage> {
       viewMap["Searched"] =
           List.filled(viewMap["Function group"]!.length, true);
 
+      if (viewMap.isNotEmpty) {
+        listLength = viewMap["Function group"]!.length;
+        mapLoaded = true;
+      }
       setState(() {});
     }
   }
@@ -379,7 +450,7 @@ class _HomePageState extends State<HomePage> {
             onPressed: () {
               showMenu(
                   context: context,
-                  position: RelativeRect.fromLTRB(0, 0, 0, 0),
+                  position: const RelativeRect.fromLTRB(0, 0, 0, 0),
                   items: [
                     PopupMenuItem(
                         value: _selectFile,
@@ -399,13 +470,15 @@ class _HomePageState extends State<HomePage> {
                         height: 2,
                         child: PopupMenuDivider(height: 2)),
                     PopupMenuItem(
-                        value: _closeCurrentSetup,
+                        value: () {
+                          _closeCurrentSetup();
+                          setState(() {});
+                        },
                         child: const Text('Close current setup')),
                     PopupMenuItem(
                         value: _toggleZeroOneBased,
-                        child: Text("Toggle zero/one based (currently " +
-                            (zeroBased ? "zero" : "one") +
-                            " based)")),
+                        child: Text(
+                            "Toggle zero/one based (currently ${zeroBased ? "zero" : "one"} based)")),
                   ]).then((value) {
                 if (value != null) {
                   value();
@@ -413,48 +486,23 @@ class _HomePageState extends State<HomePage> {
               });
             },
           )),
-      body: viewMap.values.first.isEmpty
+      body: !mapLoaded
           ? Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
+                  const Text(
                       "Start by loading a DEIF modbuslist in excel format, or a previously saved setup."),
-                  Text("Modbuslists can be found on DEIFs webpage"),
+                  const Text("Modbuslists can be found on DEIFs webpage"),
                   TextButton(
                       onPressed: () => _launchUrl("https://www.deif.com"),
                       child: const Text("Go to DEIF webpage")),
-                  Text("Or downloaded directly here:"),
-                  TextButton(
-                      onPressed: () => _launchUrl(
-                          "https://deif-cdn-umbraco.azureedge.net/media/shjn54mw/agc-4-mk-ii-modbus-tables-4189341272-uk.xlsx"),
-                      child: const Text("AGC-4-MK-II")),
-                  TextButton(
-                      onPressed: () => _launchUrl(
-                          "https://deif-cdn-umbraco.azureedge.net/media/va3b0mah/asc-4-modbus-server-tables-4189341284-uk.xlsx"),
-                      child: const Text("ASC-4")),
-                  TextButton(
-                      onPressed: () => _launchUrl(
-                          "https://deif-cdn-umbraco.azureedge.net/media/qyeogmjx/alc-4-modbus-tables-4189341283-uk.xlsx"),
-                      child: const Text("ALC-4")),
-                  TextButton(
-                      onPressed: () => _launchUrl(
-                          "https://deif-cdn-umbraco.azureedge.net/media/f2hiadel/agc-150-modbus-server-tables-4189341212-uk.xlsx"),
-                      child: const Text("AGC 150")),
-                  TextButton(
-                      onPressed: () => _launchUrl(
-                          "https://deif-cdn-umbraco.azureedge.net/media/qzbo5thj/asc-150-modbus-server-tables-4189341324-uk.xlsx"),
-                      child: const Text("ASC 150")),
-                  TextButton(
-                      onPressed: () => _launchUrl(
-                          "https://deif-cdn-umbraco.azureedge.net/media/zizlfabe/ppm-300-modbus-tables-4189341079-uk.xlsx"),
-                      child: const Text("PPM 300")),
-                  TextButton(
-                      onPressed: () => _launchUrl(
-                          "https://deif-cdn-umbraco.azureedge.net/media/wfcn3snq/ppu-300-modbus-tables-4189341101-uk.xlsx"),
-                      child: const Text("PPU 300")),
-
-                  //https://deif-cdn-umbraco.azureedge.net/media/shjn54mw/agc-4-mk-ii-modbus-tables-4189341272-uk.xlsx?rnd=133226713347070000&v=8
+                  const Text("Or downloaded directly here:"),
+                  ...deifLinks.entries.map((e) {
+                    return TextButton(
+                        onPressed: () => _launchUrl(e.value),
+                        child: Text(e.key));
+                  }).toList(),
                 ],
               ),
             )
@@ -468,7 +516,7 @@ class _HomePageState extends State<HomePage> {
                               }),
                           child: Text(e,
                               style: e == activeController
-                                  ? TextStyle(
+                                  ? const TextStyle(
                                       decoration: TextDecoration.underline)
                                   : null)))
                       .toList(),
@@ -499,23 +547,25 @@ class _HomePageState extends State<HomePage> {
                                 children: [
                                   Text(entry.key),
                                   switch (entry.key) {
-                                    "Function group" => IconButton(
-                                        icon: Icon(Icons.filter_list),
-                                        onPressed: () {
-                                          _showFilterMenu(
-                                              entry.key, entry.value);
-                                        }),
-                                    "Data type" => IconButton(
-                                        icon: Icon(Icons.filter_list),
-                                        onPressed: () {
-                                          _showFilterMenu(
-                                              entry.key, entry.value);
-                                        }),
+                                    "Function group" => GestureDetector(
+                                        onTapDown: (details) => _showFilterMenu(
+                                            entry.key, entry.value, details),
+                                        child: Icon(Icons.filter_list,
+                                            color: functionGroupFilter != ""
+                                                ? Colors.green
+                                                : null)),
+                                    "Data type" => GestureDetector(
+                                        onTapDown: (details) => _showFilterMenu(
+                                            entry.key, entry.value, details),
+                                        child: Icon(Icons.filter_list,
+                                            color: dataTypeFilter != ""
+                                                ? Colors.green
+                                                : null)),
                                     "Controller function name" => IconButton(
                                         onPressed: () => setState(() {
                                               searchActive = true;
                                             }),
-                                        icon: Icon(Icons.search)),
+                                        icon: const Icon(Icons.search)),
                                     "Selected" => Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
@@ -524,7 +574,8 @@ class _HomePageState extends State<HomePage> {
                                             child: IconButton(
                                                 visualDensity:
                                                     VisualDensity.compact,
-                                                icon: Icon(Icons.check_box),
+                                                icon:
+                                                    const Icon(Icons.check_box),
                                                 onPressed: () {
                                                   _selectAllVisible();
                                                   setState(() {});
@@ -535,7 +586,7 @@ class _HomePageState extends State<HomePage> {
                                             child: IconButton(
                                                 visualDensity:
                                                     VisualDensity.compact,
-                                                icon: Icon(Icons
+                                                icon: const Icon(Icons
                                                     .indeterminate_check_box),
                                                 onPressed: () {
                                                   _deselectAllVisible();
@@ -544,7 +595,7 @@ class _HomePageState extends State<HomePage> {
                                           ),
                                         ],
                                       ),
-                                    String() => SizedBox.shrink()
+                                    String() => const SizedBox.shrink()
                                   }
                                 ]),
                           ),
@@ -557,25 +608,31 @@ class _HomePageState extends State<HomePage> {
                         dense: true,
                         leading: IconButton(
                             onPressed: () => setState(() {
-                                  _search(indexSearch(
-                                      viewMap, "Controller function name", ""));
+                                  //_search(indexSearch(
+                                  // viewMap, "Controller function name", ""));
+                                  searchString = "";
                                   searchActive = false;
+                                  setState(() {});
                                 }),
-                            icon: Icon(Icons.close)),
+                            icon: const Icon(Icons.close)),
                         title: TextField(
                             autofocus: true,
                             onChanged: (value) {
-                              _search(indexSearch(
-                                  viewMap, "Controller function name", value));
+                              //_search(indexSearch(
+                              //    viewMap, "Controller function name", value));
+
+                              searchString = value;
+                              setState(() {});
                             }),
                       )
-                    : SizedBox.shrink(),
+                    : const SizedBox.shrink(),
                 Expanded(
                   child: ListView.builder(
-                    itemCount: viewMap.values.first.length,
+                    itemCount: listLength,
                     itemBuilder: (context, index) {
                       return Visibility(
                         visible: shouldBeVisible(index),
+                        //maintainState: true,
                         child: Card(
                           color: viewMap["Selected"]![index]
                               ? Colors.green[100]
@@ -653,7 +710,7 @@ List indexFilter(Map map, String keyToFilter, var filter) {
   }
   return indexFilter;
 }
-
+/*
 List indexSearch(Map map, String keyToSearch, var search) {
   if (search == "") {
     return List.generate(map[keyToSearch]!.length, (index) => index);
@@ -666,3 +723,4 @@ List indexSearch(Map map, String keyToSearch, var search) {
   }
   return indexSearch;
 }
+*/
