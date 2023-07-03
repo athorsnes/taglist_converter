@@ -34,26 +34,15 @@ class _HomePageState extends State<HomePage> {
         "https://deif-cdn-umbraco.azureedge.net/media/wfcn3snq/ppu-300-modbus-tables-4189341101-uk.xlsx",
   };
 
-  final Map<String, List> baseMap = {
-    "Function group": [],
-    "PLC address": [],
-    "Bit": [],
-    "Controller function name": [],
-    "Function code": [],
-    "Data type": [],
-  };
-  Map<String, List> viewMap = {
-    "Function group": [],
-    "PLC address": [],
-    "Bit": [],
-    "Controller function name": [],
-    "Function code": [],
-    "Data type": [],
-  };
-
   List<Tag> tags = [];
+  List functionGroups = [];
+  List dataTypes = [];
+  Map filterValues = {
+    "Function groups": [],
+    "Data types": [],
+  };
 
-  Map columnWidths = {
+  Map<String, double> columns = {
     "Function group": 200.0,
     "PLC address": 150.0,
     "Bit": 70.0,
@@ -84,10 +73,8 @@ class _HomePageState extends State<HomePage> {
   bool zeroBased = false;
   bool searchActive = false;
 
-  bool mapLoaded = false;
-  int listLength = 0;
+  bool listLoaded = false;
 
-  //TESTING
   String searchString = "";
   String dataTypeFilter = "";
   String functionGroupFilter = "";
@@ -99,8 +86,6 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _closeCurrentSetup() {
-    mapLoaded = false;
-    viewMap = Map.fromIterables(baseMap.keys, baseMap.values);
     detectedControllerTypes = [];
     activeController = "";
     _resetFiltersAndSearch();
@@ -111,28 +96,33 @@ class _HomePageState extends State<HomePage> {
     setState(() {});
   }
 
-  Map<String, List> filteredMap(Map map, List filterList) {
-    Map<String, List> tempMap = Map.from(map);
-
-    tempMap.forEach((key, value) {
-      List tempList = [];
-      for (var element in filterList) {
-        tempList.add(value[element]);
-      }
-      tempMap[key] = tempList;
-    });
-    return tempMap;
-  }
-
-  Future<void> _saveAsJson() async {
+  Future<bool> _saveAsJson() async {
     final result = await FilePicker.platform.saveFile(
       type: FileType.custom,
       allowedExtensions: ['json'],
     );
     if (result != null) {
       File file = File("$result.json");
-      file.writeAsString(jsonEncode(viewMap));
+      List jsonTags = [];
+      for (Tag tag in tags) {
+        jsonTags.add(tag.toJsonMap());
+      }
+      Map finalMap = {
+        "Detected controllers": detectedControllerTypes,
+        "Filter values": filterValues,
+        "Tags": jsonTags,
+      };
+      try {
+        file.writeAsString(jsonEncode(finalMap));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("Setup saved")));
+        return true;
+      } catch (e) {
+        print(e);
+        return false;
+      }
     }
+    return false;
   }
 
   Future<void> _readFromJson() async {
@@ -146,17 +136,20 @@ class _HomePageState extends State<HomePage> {
       String jsonString = String.fromCharCodes(bytes);
       Map jsonMap = jsonDecode(jsonString);
 
-      viewMap = Map.from(jsonMap);
-      detectedControllerTypes = controllersInViewMap();
-      activeController = detectedControllerTypes[0];
-      if (viewMap.values.first.isNotEmpty) {
-        listLength = viewMap.values.first.length;
-        mapLoaded = true;
+      detectedControllerTypes = jsonMap["Detected controllers"];
+      filterValues = jsonMap["Filter values"];
+      for (var element in jsonMap["Tags"]) {
+        Tag tag = Tag.fromJsonMap(element);
+        tags.add(tag);
       }
+
+      activeController = detectedControllerTypes[0];
+      listLoaded = true;
       setState(() {});
     }
   }
 
+  //NEEDS work
   Future<void> _exportToTaglist() async {
     final result = await FilePicker.platform.saveFile(
       type: FileType.custom,
@@ -164,8 +157,7 @@ class _HomePageState extends State<HomePage> {
     );
     if (result != null) {
       File file = File("$result.xml");
-      Map<String, List> finalMap =
-          filteredMap(viewMap, indexFilter(viewMap, "Selected", true));
+      Map<String, List> finalMap = {};
 
       file.writeAsString(xmlString(finalMap, zeroBased));
     }
@@ -178,8 +170,13 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _showFilterMenu(entrykey, entryValue, TapDownDetails details) {
-    List filterList = List.from(entryValue);
-    filterList.removeWhere((value) => value == null);
+    //Should be loaded when list is read
+    List filterList = [];
+    if (entrykey == "Function group") {
+      filterList.addAll(filterValues["Function groups"]);
+    } else if (entrykey == "Data type") {
+      filterList.addAll(filterValues["Data types"]);
+    }
     filterList = filterList.toSet().toList()..insert(0, "Show all");
     if (filterList.isEmpty) {
       return;
@@ -198,7 +195,6 @@ class _HomePageState extends State<HomePage> {
         .then((value) {
       if (value != null) {
         if (value == "Show all") {
-          //viewMap["Filtered"] = List.filled(viewMap[entrykey]!.length, true);
           if (entrykey == "Data type") {
             dataTypeFilter = "";
           } else if (entrykey == "Function group") {
@@ -207,7 +203,7 @@ class _HomePageState extends State<HomePage> {
           setState(() {});
           return;
         }
-        //_filter(indexFilter(viewMap, entrykey, value.toString()));
+
         if (entrykey == "Data type") {
           dataTypeFilter = value.toString();
         } else if (entrykey == "Function group") {
@@ -220,78 +216,18 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  void _selectAllVisible() {
-    for (var i = 0; i < viewMap.values.first.length; i++) {
-      if (shouldBeVisible(i)) {
-        viewMap["Selected"]![i] = true;
-      }
+  void _selectAllVisible(List<Tag> visibleTags) {
+    for (var i = 0; i < visibleTags.length; i++) {
+      visibleTags[i].selected = true;
     }
+    setState(() {});
   }
 
-  void _deselectAllVisible() {
-    for (var i = 0; i < viewMap.values.first.length; i++) {
-      if (shouldBeVisible(i)) {
-        viewMap["Selected"]![i] = false;
-      }
+  void _deselectAllVisible(List<Tag> visibleTags) {
+    for (var i = 0; i < visibleTags.length; i++) {
+      visibleTags[i].selected = false;
     }
-  }
-
-  List controllersInViewMap() {
-    List controllersInViewMap = [];
-    for (String element in viewMap.keys) {
-      if (possibleControllerTypes.contains(element)) {
-        controllersInViewMap.add(element);
-      }
-    }
-    return controllersInViewMap;
-  }
-
-  bool selectedAndAvailable(int index) {
-    if (viewMap["Selected"]![index] == true &&
-        viewMap[activeController]![index] == "X") {
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  int lengthOfSelectedAndAvaiable() {
-    List selectedAndAvaliableList = List<bool>.generate(
-        viewMap["Function code"]!.length,
-        (index) => selectedAndAvailable(index));
-    return selectedAndAvaliableList.where((element) => element == true).length;
-  }
-
-  bool shouldBeVisible(int index) {
-    bool searchHit = true;
-    bool dataTypeMatch = false;
-    bool functionGroupMatch = false;
-    bool controllerMatch = false;
-
-    if (searchString != "" &&
-        !viewMap["Controller function name"]![index]
-            .toLowerCase()
-            .contains(searchString.toLowerCase())) {
-      searchHit = false;
-    }
-    if (dataTypeFilter == "" ||
-        viewMap["Data type"]![index] == dataTypeFilter) {
-      dataTypeMatch = true;
-    }
-    if (functionGroupFilter == "" ||
-        viewMap["Function group"]![index] == functionGroupFilter) {
-      functionGroupMatch = true;
-    }
-
-    if (viewMap[activeController]![index] == "X") {
-      controllerMatch = true;
-    }
-
-    if (searchHit && dataTypeMatch && functionGroupMatch && controllerMatch) {
-      return true;
-    } else {
-      return false;
-    }
+    setState(() {});
   }
 
   Future<void> _selectFile() async {
@@ -354,80 +290,21 @@ class _HomePageState extends State<HomePage> {
       discreteInputMap["Bit"] =
           List.filled(discreteInputMap["PLC address"]!.length, "");
 
-      //Add detected controller types as keys in viewMap
-      for (String element in detectedControllerTypes) {
-        viewMap[element] = [];
-      }
+      tags.addAll(sheetmapToTags(discreteInputMap, detectedControllerTypes));
+      tags.addAll(sheetmapToTags(discreteOutputMap, detectedControllerTypes));
+      tags.addAll(sheetmapToTags(holdingRegisterMap, detectedControllerTypes));
+      tags.addAll(sheetmapToTags(inputRegisterMap, detectedControllerTypes));
 
-      for (var i = 0; i < discreteInputMap.values.first.length; i++) {
-        tags.add(Tag(
-            discreteInputMap["Controller function name"][i],
-            discreteInputMap["Function group"][i],
-            discreteInputMap["PLC address"][i],
-            discreteInputMap["Bit"][i],
-            discreteInputMap["Data type"][i],
-            false,
-            true));
-      }
-
-      for (var i = 0; i < discreteOutputMap.values.first.length; i++) {
-        tags.add(Tag(
-            discreteOutputMap["Controller function name"][i],
-            discreteOutputMap["Function group"][i],
-            discreteOutputMap["PLC address"][i],
-            discreteOutputMap["Bit"][i],
-            discreteOutputMap["Data type"][i],
-            false,
-            true));
-      }
-
-      for (var i = 0; i < holdingRegisterMap.values.first.length; i++) {
-        tags.add(Tag(
-            holdingRegisterMap["Controller function name"][i],
-            holdingRegisterMap["Function group"][i],
-            holdingRegisterMap["PLC address"][i],
-            holdingRegisterMap["Bit"][i],
-            holdingRegisterMap["Data type"][i],
-            false,
-            true));
-      }
-      for (var i = 0; i < inputRegisterMap.values.first.length; i++) {
-        tags.add(Tag(
-            inputRegisterMap["Controller function name"][i],
-            inputRegisterMap["Function group"][i],
-            inputRegisterMap["PLC address"][i],
-            inputRegisterMap["Bit"][i],
-            inputRegisterMap["Data type"][i],
-            false,
-            true));
-      }
-
-      viewMap.forEach((key, value) {
-        if (discreteOutputMap[key] != null) {
-          value.addAll(discreteOutputMap[key]);
+      for (var tag in tags) {
+        if (!filterValues["Function groups"].contains(tag.functionGroup)) {
+          filterValues["Function groups"].add(tag.functionGroup);
         }
-        if (discreteInputMap[key] != null) {
-          value.addAll(discreteInputMap[key]);
-        }
-        if (holdingRegisterMap[key] != null) {
-          value.addAll(holdingRegisterMap[key]);
-        }
-        if (inputRegisterMap[key] != null) {
-          value.addAll(inputRegisterMap[key]);
-        }
-      });
 
-      viewMap["Selected"] =
-          List.filled(viewMap["Function group"]!.length, false);
-      viewMap["Filtered"] =
-          List.filled(viewMap["Function group"]!.length, true);
-      viewMap["Searched"] =
-          List.filled(viewMap["Function group"]!.length, true);
-
-      if (viewMap.isNotEmpty) {
-        listLength = viewMap["Function group"]!.length;
-        mapLoaded = true;
+        if (!filterValues["Data types"].contains(tag.dataType)) {
+          filterValues["Data types"].add(tag.dataType);
+        }
       }
+      listLoaded = true;
       setState(() {});
     }
   }
@@ -435,6 +312,10 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     List<Tag> visibleTags = tags;
+
+    visibleTags = visibleTags
+        .where((element) => element.controllerTypes.contains(activeController))
+        .toList();
 
     if (dataTypeFilter != "") {
       visibleTags = visibleTags
@@ -446,15 +327,20 @@ class _HomePageState extends State<HomePage> {
           .where((element) => element.functionGroup == functionGroupFilter)
           .toList();
     }
+    if (searchString != "") {
+      visibleTags = visibleTags
+          .where((element) =>
+              element.name.toLowerCase().contains(searchString.toLowerCase()))
+          .toList();
+    }
 
     return Scaffold(
       floatingActionButton: FloatingActionButton(
         onPressed: () => _exportToTaglist(),
         child: Column(
           children: [
-            Text(viewMap["Selected"] != null
-                ? lengthOfSelectedAndAvaiable().toString()
-                : "0"),
+            Text(
+                '${visibleTags.where((element) => element.selected).length.toString()}/${visibleTags.length}'),
             const Icon(Icons.download),
           ],
         ),
@@ -489,6 +375,7 @@ class _HomePageState extends State<HomePage> {
                         value: () {
                           _closeCurrentSetup();
                           setState(() {});
+                          return true;
                         },
                         child: const Text('Close current setup')),
                     PopupMenuItem(
@@ -502,7 +389,7 @@ class _HomePageState extends State<HomePage> {
               });
             },
           )),
-      body: !mapLoaded
+      body: !listLoaded
           ? Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -525,7 +412,7 @@ class _HomePageState extends State<HomePage> {
           : Column(
               children: [
                 Row(
-                  children: controllersInViewMap()
+                  children: detectedControllerTypes
                       .map((e) => TextButton(
                           onPressed: () => setState(() {
                                 activeController = e;
@@ -540,92 +427,58 @@ class _HomePageState extends State<HomePage> {
                 ListTile(
                   dense: true,
                   title: Row(
-                      //mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: viewMap.entries.map((entry) {
-                        Widget sizedBox = Visibility(
-                          visible: switch (entry.key) {
-                            "Function group" => true,
-                            "PLC address" => true,
-                            "Bit" => true,
-                            "Controller function name" => true,
-                            "Function code" => false,
-                            "Data type" => true,
-                            "Selected" => true,
-                            String() => false
-                          },
-                          child: SizedBox(
-                            width: columnWidths[entry.key],
-                            //height: 48,
-                            child: Row(
+                    //mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      ...columns.entries.map((entry) {
+                        Widget sizedBox = SizedBox(
+                          width: columns[entry.key],
+                          //height: 48,
+                          child: Row(
 
-                                //mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(entry.key),
-                                  switch (entry.key) {
-                                    "Function group" => GestureDetector(
-                                        onTapDown: (details) => _showFilterMenu(
-                                            entry.key, entry.value, details),
-                                        child: Icon(Icons.filter_list,
-                                            color: functionGroupFilter != ""
-                                                ? Colors.green
-                                                : null)),
-                                    "Data type" => GestureDetector(
-                                        onTapDown: (details) => _showFilterMenu(
-                                            entry.key, entry.value, details),
-                                        child: Icon(Icons.filter_list,
-                                            color: dataTypeFilter != ""
-                                                ? Colors.green
-                                                : null)),
-                                    "Controller function name" => IconButton(
-                                        onPressed: () => setState(() {
-                                              searchActive = true;
-                                            }),
-                                        icon: const Icon(Icons.search)),
-                                    "Selected" => Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Tooltip(
-                                            message: "Select all in list",
-                                            child: IconButton(
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                icon:
-                                                    const Icon(Icons.check_box),
-                                                onPressed: () {
-                                                  _selectAllVisible();
-                                                  setState(() {});
-                                                }),
-                                          ),
-                                          Tooltip(
-                                            message: "Deselect all in list",
-                                            child: IconButton(
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                icon: const Icon(Icons
-                                                    .indeterminate_check_box),
-                                                onPressed: () {
-                                                  _deselectAllVisible();
-                                                  setState(() {});
-                                                }),
-                                          ),
-                                        ],
-                                      ),
-                                    String() => const SizedBox.shrink()
-                                  }
-                                ]),
-                          ),
+                              //mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(entry.key),
+                                switch (entry.key) {
+                                  "Function group" => GestureDetector(
+                                      onTapDown: (details) => _showFilterMenu(
+                                          entry.key, entry.value, details),
+                                      child: Icon(Icons.filter_list,
+                                          color: functionGroupFilter != ""
+                                              ? Colors.green
+                                              : null)),
+                                  "Data type" => GestureDetector(
+                                      onTapDown: (details) => _showFilterMenu(
+                                          entry.key, entry.value, details),
+                                      child: Icon(Icons.filter_list,
+                                          color: dataTypeFilter != ""
+                                              ? Colors.green
+                                              : null)),
+                                  "Controller function name" => IconButton(
+                                      onPressed: () => setState(() {
+                                            searchActive = true;
+                                          }),
+                                      icon: const Icon(Icons.search)),
+                                  String() => const SizedBox.shrink(),
+                                }
+                              ]),
                         );
                         return sizedBox;
-                      }).toList()),
+                      }).toList(),
+                      TextButton(
+                          onPressed: () => _selectAllVisible(visibleTags),
+                          child: const Text("Select all")),
+                      TextButton(
+                          onPressed: () => _deselectAllVisible(visibleTags),
+                          child: const Text("Deselect all")),
+                    ],
+                  ),
                 ),
                 searchActive
                     ? ListTile(
                         dense: true,
                         leading: IconButton(
                             onPressed: () => setState(() {
-                                  //_search(indexSearch(
-                                  // viewMap, "Controller function name", ""));
                                   searchString = "";
                                   searchActive = false;
                                   setState(() {});
@@ -634,9 +487,6 @@ class _HomePageState extends State<HomePage> {
                         title: TextField(
                             autofocus: true,
                             onChanged: (value) {
-                              //_search(indexSearch(
-                              //    viewMap, "Controller function name", value));
-
                               searchString = value;
                               setState(() {});
                             }),
@@ -645,10 +495,10 @@ class _HomePageState extends State<HomePage> {
                 Expanded(
                   child: ListView.builder(
                     itemCount: visibleTags.length,
-                    itemExtent: 60,
+                    itemExtent: 48,
                     itemBuilder: (context, index) {
                       return Card(
-                        color: tags[index].selected
+                        color: visibleTags[index].selected
                             ? Colors.green[100]
                             : Colors.white,
                         child: ListTile(
@@ -656,31 +506,31 @@ class _HomePageState extends State<HomePage> {
                           title: Row(
                             children: [
                               SizedBox(
-                                  width: columnWidths["Function group"],
+                                  width: columns["Function group"],
                                   child:
                                       Text(visibleTags[index].functionGroup)),
                               SizedBox(
-                                  width: columnWidths["PLC address"],
+                                  width: columns["PLC address"],
                                   child: Text(visibleTags[index].plcAddress)),
                               SizedBox(
-                                  width: columnWidths["Bit"],
+                                  width: columns["Bit"],
                                   child: Text(visibleTags[index].bit)),
                               SizedBox(
-                                  width:
-                                      columnWidths["Controller function name"],
+                                  width: columns["Controller function name"],
                                   child: Text(visibleTags[index].name)),
                               SizedBox(
-                                  width: columnWidths["Data type"],
+                                  width: columns["Data type"],
                                   child: Text(visibleTags[index].dataType)),
                               SizedBox(
-                                  width: columnWidths["Selected"],
+                                  width: columns["Selected"],
                                   child: Icon(visibleTags[index].selected
                                       ? Icons.check_box
                                       : Icons.indeterminate_check_box)),
                             ],
                           ),
                           onTap: () {
-                            tags[index].selected = !tags[index].selected;
+                            visibleTags[index].selected =
+                                !visibleTags[index].selected;
 
                             setState(() {});
                           },
@@ -723,8 +573,55 @@ class Tag {
   String plcAddress;
   String bit;
   String dataType;
+  List controllerTypes;
   bool selected;
   bool visible;
+
   Tag(this.name, this.functionGroup, this.plcAddress, this.bit, this.dataType,
-      this.selected, this.visible);
+      this.controllerTypes, this.selected, this.visible);
+
+  Tag.fromJsonMap(Map json)
+      : name = json["name"],
+        functionGroup = json["functionGroup"],
+        plcAddress = json["plcAddress"],
+        bit = json["bit"],
+        dataType = json["dataType"],
+        controllerTypes = json["controllerTypes"],
+        selected = json["selected"],
+        visible = json["visible"];
+
+  toJsonMap() {
+    return {
+      "name": name,
+      "functionGroup": functionGroup,
+      "plcAddress": plcAddress,
+      "bit": bit,
+      "dataType": dataType,
+      "controllerTypes": controllerTypes,
+      "selected": selected,
+      "visible": visible,
+    };
+  }
+}
+
+List<Tag> sheetmapToTags(Map sheetmap, List detectedControllerTypes) {
+  List<Tag> tags = [];
+  for (var i = 0; i < sheetmap.values.first.length; i++) {
+    List<String> controllers = [];
+    for (String element in detectedControllerTypes) {
+      if (sheetmap[element]![i] == "X") {
+        controllers.add(element);
+      }
+    }
+    tags.add(Tag(
+        sheetmap["Controller function name"][i],
+        sheetmap["Function group"][i],
+        sheetmap["PLC address"][i],
+        sheetmap["Bit"][i],
+        sheetmap["Data type"][i],
+        controllers,
+        false,
+        true));
+  }
+  return tags;
 }
