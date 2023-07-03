@@ -99,14 +99,6 @@ class _HomePageState extends State<HomePage> {
   void _closeCurrentSetup() {
     mapLoaded = false;
     viewMap = Map.fromIterables(baseMap.keys, baseMap.values);
-    /*
-    for (var key in viewMap.keys) {
-      viewMap[key] = [];
-    }
-    
-    for(int i=0; i> viewMap.values.length; i++){
-      viewMap.values[i] = [];
-    }*/
     detectedControllerTypes = [];
     activeController = "";
     _resetFiltersAndSearch();
@@ -117,27 +109,6 @@ class _HomePageState extends State<HomePage> {
     setState(() {});
   }
 
-  /*
-  void _filter(List filterList) {
-    List tempList = List.filled(viewMap["Function group"]!.length, false);
-    for (var element in filterList) {
-      tempList[element] = true;
-    }
-    viewMap["Filtered"] = tempList;
-
-    setState(() {});
-  }
-
-  void _search(List searchList) {
-    List tempList = List.filled(viewMap["Function group"]!.length, false);
-    for (var element in searchList) {
-      tempList[element] = true;
-    }
-    viewMap["Searched"] = tempList;
-
-    setState(() {});
-  }
-*/
   Map<String, List> filteredMap(Map map, List filterList) {
     Map<String, List> tempMap = Map.from(map);
 
@@ -629,6 +600,8 @@ class _HomePageState extends State<HomePage> {
                 Expanded(
                   child: ListView.builder(
                     itemCount: listLength,
+
+                    //itemExtent: 48,
                     itemBuilder: (context, index) {
                       return Visibility(
                         visible: shouldBeVisible(index),
@@ -710,17 +683,3 @@ List indexFilter(Map map, String keyToFilter, var filter) {
   }
   return indexFilter;
 }
-/*
-List indexSearch(Map map, String keyToSearch, var search) {
-  if (search == "") {
-    return List.generate(map[keyToSearch]!.length, (index) => index);
-  }
-  List indexSearch = [];
-  for (var i = 0; i < map[keyToSearch]!.length; i++) {
-    if (map[keyToSearch]?[i].toLowerCase().contains(search.toLowerCase())) {
-      indexSearch.add(i);
-    }
-  }
-  return indexSearch;
-}
-*/
