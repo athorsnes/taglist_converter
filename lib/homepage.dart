@@ -51,6 +51,8 @@ class _HomePageState extends State<HomePage> {
     "Data type": [],
   };
 
+  List<Tag> tags = [];
+
   Map columnWidths = {
     "Function group": 200.0,
     "PLC address": 150.0,
@@ -143,9 +145,6 @@ class _HomePageState extends State<HomePage> {
       var bytes = File(result.paths[0]!).readAsBytesSync();
       String jsonString = String.fromCharCodes(bytes);
       Map jsonMap = jsonDecode(jsonString);
-
-      //Map finalMap =
-      // filteredMap(viewMap, indexFilter(viewMap, "Selected", false));
 
       viewMap = Map.from(jsonMap);
       detectedControllerTypes = controllersInViewMap();
@@ -295,16 +294,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  bool shouldBeVisibleOriginal(int index) {
-    if (viewMap["Filtered"]![index] &&
-        (viewMap[activeController]![index] == "X") &&
-        (viewMap["Searched"]![index])) {
-      return true;
-    } else {
-      return false;
-    }
-  }
-
   Future<void> _selectFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -370,6 +359,49 @@ class _HomePageState extends State<HomePage> {
         viewMap[element] = [];
       }
 
+      for (var i = 0; i < discreteInputMap.values.first.length; i++) {
+        tags.add(Tag(
+            discreteInputMap["Controller function name"][i],
+            discreteInputMap["Function group"][i],
+            discreteInputMap["PLC address"][i],
+            discreteInputMap["Bit"][i],
+            discreteInputMap["Data type"][i],
+            false,
+            true));
+      }
+
+      for (var i = 0; i < discreteOutputMap.values.first.length; i++) {
+        tags.add(Tag(
+            discreteOutputMap["Controller function name"][i],
+            discreteOutputMap["Function group"][i],
+            discreteOutputMap["PLC address"][i],
+            discreteOutputMap["Bit"][i],
+            discreteOutputMap["Data type"][i],
+            false,
+            true));
+      }
+
+      for (var i = 0; i < holdingRegisterMap.values.first.length; i++) {
+        tags.add(Tag(
+            holdingRegisterMap["Controller function name"][i],
+            holdingRegisterMap["Function group"][i],
+            holdingRegisterMap["PLC address"][i],
+            holdingRegisterMap["Bit"][i],
+            holdingRegisterMap["Data type"][i],
+            false,
+            true));
+      }
+      for (var i = 0; i < inputRegisterMap.values.first.length; i++) {
+        tags.add(Tag(
+            inputRegisterMap["Controller function name"][i],
+            inputRegisterMap["Function group"][i],
+            inputRegisterMap["PLC address"][i],
+            inputRegisterMap["Bit"][i],
+            inputRegisterMap["Data type"][i],
+            false,
+            true));
+      }
+
       viewMap.forEach((key, value) {
         if (discreteOutputMap[key] != null) {
           value.addAll(discreteOutputMap[key]);
@@ -402,6 +434,19 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    List<Tag> visibleTags = tags;
+
+    if (dataTypeFilter != "") {
+      visibleTags = visibleTags
+          .where((element) => element.dataType == dataTypeFilter)
+          .toList();
+    }
+    if (functionGroupFilter != "") {
+      visibleTags = visibleTags
+          .where((element) => element.functionGroup == functionGroupFilter)
+          .toList();
+    }
+
     return Scaffold(
       floatingActionButton: FloatingActionButton(
         onPressed: () => _exportToTaglist(),
@@ -599,58 +644,46 @@ class _HomePageState extends State<HomePage> {
                     : const SizedBox.shrink(),
                 Expanded(
                   child: ListView.builder(
-                    itemCount: listLength,
-
-                    //itemExtent: 48,
+                    itemCount: visibleTags.length,
+                    itemExtent: 60,
                     itemBuilder: (context, index) {
-                      return Visibility(
-                        visible: shouldBeVisible(index),
-                        //maintainState: true,
-                        child: Card(
-                          color: viewMap["Selected"]![index]
-                              ? Colors.green[100]
-                              : Colors.white,
-                          child: ListTile(
-                            dense: true,
-                            title: Row(
-                              children: [
-                                SizedBox(
-                                    width: columnWidths["Function group"],
-                                    child: Text(
-                                        viewMap["Function group"]![index]
-                                            .toString())),
-                                SizedBox(
-                                    width: columnWidths["PLC address"],
-                                    child: Text(viewMap["PLC address"]![index]
-                                        .toString())),
-                                SizedBox(
-                                    width: columnWidths["Bit"],
-                                    child: Text(
-                                        viewMap["Bit"]![index].toString())),
-                                SizedBox(
-                                    width: columnWidths[
-                                        "Controller function name"],
-                                    child: Text(viewMap[
-                                            "Controller function name"]![index]
-                                        .toString())),
-                                SizedBox(
-                                    width: columnWidths["Data type"],
-                                    child: Text(viewMap["Data type"]![index]
-                                        .toString())),
-                                SizedBox(
-                                    width: columnWidths["Selected"],
-                                    child: Icon(viewMap["Selected"]![index]
-                                        ? Icons.check_box
-                                        : Icons.indeterminate_check_box)),
-                              ],
-                            ),
-                            onTap: () {
-                              viewMap["Selected"]![index] =
-                                  !viewMap["Selected"]![index];
-
-                              setState(() {});
-                            },
+                      return Card(
+                        color: tags[index].selected
+                            ? Colors.green[100]
+                            : Colors.white,
+                        child: ListTile(
+                          dense: true,
+                          title: Row(
+                            children: [
+                              SizedBox(
+                                  width: columnWidths["Function group"],
+                                  child:
+                                      Text(visibleTags[index].functionGroup)),
+                              SizedBox(
+                                  width: columnWidths["PLC address"],
+                                  child: Text(visibleTags[index].plcAddress)),
+                              SizedBox(
+                                  width: columnWidths["Bit"],
+                                  child: Text(visibleTags[index].bit)),
+                              SizedBox(
+                                  width:
+                                      columnWidths["Controller function name"],
+                                  child: Text(visibleTags[index].name)),
+                              SizedBox(
+                                  width: columnWidths["Data type"],
+                                  child: Text(visibleTags[index].dataType)),
+                              SizedBox(
+                                  width: columnWidths["Selected"],
+                                  child: Icon(visibleTags[index].selected
+                                      ? Icons.check_box
+                                      : Icons.indeterminate_check_box)),
+                            ],
                           ),
+                          onTap: () {
+                            tags[index].selected = !tags[index].selected;
+
+                            setState(() {});
+                          },
                         ),
                       );
                     },
@@ -682,4 +715,16 @@ List indexFilter(Map map, String keyToFilter, var filter) {
     }
   }
   return indexFilter;
+}
+
+class Tag {
+  String name;
+  String functionGroup;
+  String plcAddress;
+  String bit;
+  String dataType;
+  bool selected;
+  bool visible;
+  Tag(this.name, this.functionGroup, this.plcAddress, this.bit, this.dataType,
+      this.selected, this.visible);
 }
