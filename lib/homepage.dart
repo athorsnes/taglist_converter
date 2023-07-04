@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' as exc;
+import 'package:flutter/services.dart';
 import 'package:taglist_converter/backend/test.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'classes/alarm.dart';
+import 'classes/tag.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
@@ -42,13 +44,17 @@ class _HomePageState extends State<HomePage> {
     "Data types": [],
   };
 
+  Alarm alarmToCopy = Alarm.empty();
+  bool alarmIsCopied = false;
+  Map<String, String> protocolPrefixes = {};
+
   Map<String, double> columns = {
-    "Function group": 200.0,
-    "PLC address": 150.0,
-    "Bit": 70.0,
-    "Controller function name": 500.0,
-    //"Function code": 100.0,
+    "Function group": 180.0,
+    "PLC address": 130.0,
+    "Bit": 60.0,
+    "Controller function name": 400.0,
     "Data type": 130.0,
+    "Alarm": 420.0,
   };
 
   List possibleControllerTypes = [
@@ -88,6 +94,15 @@ class _HomePageState extends State<HomePage> {
   void _closeCurrentSetup() {
     detectedControllerTypes = [];
     activeController = "";
+    tags = [];
+    functionGroups = [];
+    dataTypes = [];
+    filterValues = {
+      "Function groups": [],
+      "Data types": [],
+    };
+    protocolPrefixes = {};
+    listLoaded = false;
     _resetFiltersAndSearch();
   }
 
@@ -150,16 +165,32 @@ class _HomePageState extends State<HomePage> {
   }
 
   //NEEDS work
-  Future<void> _exportToTaglist() async {
+  Future<void> _exportToTaglist(String controller) async {
     final result = await FilePicker.platform.saveFile(
       type: FileType.custom,
       allowedExtensions: ['xml'],
     );
     if (result != null) {
       File file = File("$result.xml");
-      Map<String, List> finalMap = {};
 
-      file.writeAsString(xmlString(finalMap, zeroBased));
+      file.writeAsString(xmlTagString(
+          List<Tag>.from(tags.where((tag) =>
+              tag.selected && tag.controllerTypes.contains(controller))),
+          zeroBased));
+    }
+  }
+
+  Future<void> _exportToAlarmList() async {
+    final result = await FilePicker.platform.saveFile(
+      type: FileType.custom,
+      allowedExtensions: ['xml'],
+    );
+    if (result != null) {
+      File file = File("$result.xml");
+      File alarmFile = File("$result.xml");
+
+      alarmFile.writeAsString(alarmStringXML(
+          protocolPrefixes, List<Tag>.from(tags.where((tag) => tag.selected))));
     }
   }
 
@@ -230,6 +261,10 @@ class _HomePageState extends State<HomePage> {
     setState(() {});
   }
 
+  void update() {
+    setState(() {});
+  }
+
   Future<void> _selectFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -267,6 +302,9 @@ class _HomePageState extends State<HomePage> {
 
       if (detectedControllerTypes.isNotEmpty) {
         activeController = detectedControllerTypes.first;
+        for (String controller in detectedControllerTypes) {
+          protocolPrefixes[controller + "1"] = controller;
+        }
       }
 
       //Add function code
@@ -335,8 +373,196 @@ class _HomePageState extends State<HomePage> {
     }
 
     return Scaffold(
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _exportToTaglist(),
+      drawer: Drawer(
+        child: ListView(children: [
+          ListTile(
+            onTap: () {
+              showMenu(
+                  context: context,
+                  position: const RelativeRect.fromLTRB(0, 0, 0, 0),
+                  items: [
+                    PopupMenuItem(
+                        value: _selectFile,
+                        child: const Text('Open modbus list')),
+                    const PopupMenuItem(
+                        enabled: false,
+                        height: 2,
+                        child: PopupMenuDivider(height: 2)),
+                    PopupMenuItem(
+                        value: _saveAsJson,
+                        child: const Text('Save setup as Json')),
+                    PopupMenuItem(
+                        value: _readFromJson,
+                        child: const Text('Load setup from Json')),
+                    const PopupMenuItem(
+                        enabled: false,
+                        height: 2,
+                        child: PopupMenuDivider(height: 2)),
+                    PopupMenuItem(
+                        value: () {
+                          _closeCurrentSetup();
+                          setState(() {});
+                          return true;
+                        },
+                        child: const Text('Close current setup')),
+                    PopupMenuItem(
+                        value: _toggleZeroOneBased,
+                        child: Text(
+                            "Toggle zero/one based (currently ${zeroBased ? "zero" : "one"} based)")),
+                  ]).then((value) {
+                if (value != null) {
+                  value();
+                } else {}
+              });
+            },
+            title: Text("File"),
+          ),
+          Divider(
+            height: 2,
+          ),
+          ...listLoaded
+              ? [
+                  ListTile(title: Text("Create tags for")),
+                  for (String controller in detectedControllerTypes)
+                    TextButton(
+                        onPressed: () => _exportToTaglist(controller),
+                        child: Text(controller)),
+                  ...[
+                    ListTile(title: Text("Create alarms for")),
+                    for (var entry in protocolPrefixes.entries)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(entry.key),
+                          DropdownButton<String>(
+                            isDense: true,
+                            padding: EdgeInsets.zero,
+                            value: entry.value,
+                            onChanged: (value) {
+                              FocusScope.of(context).unfocus();
+                              protocolPrefixes[entry.key] = value!;
+                              setState(() {});
+                            },
+                            items: [
+                              for (String controller in detectedControllerTypes)
+                                DropdownMenuItem(
+                                  value: controller,
+                                  child: Text(controller),
+                                ),
+                            ],
+                          ),
+                          IconButton(
+                              onPressed: () {
+                                protocolPrefixes.remove(entry.key);
+                                setState(() {});
+                                //update();
+                              },
+                              icon: Icon(Icons.remove))
+                        ],
+                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.max,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        SizedBox(
+                            width: 200,
+                            child: TextFormField(
+                              decoration: InputDecoration(
+                                  helperText: "Press enter to add",
+                                  labelText: "New prefix"),
+                              onFieldSubmitted: (value) {
+                                protocolPrefixes[value] =
+                                    detectedControllerTypes.first;
+                                setState(() {});
+
+                                //update();
+                              },
+                            )),
+                      ],
+                    ),
+                    TextButton(
+                        onPressed: () => _exportToAlarmList(),
+                        child: const Text("Create alarm list"))
+                  ]
+                ]
+              : [],
+        ]),
+      ),
+      /*floatingActionButton: FloatingActionButton(
+        onPressed: () => showDialog(
+          context: context,
+          builder: (context) {
+            return SimpleDialog(
+              children: [
+                Text("Create tags for"),
+                for (String controller in detectedControllerTypes)
+                  TextButton(
+                      onPressed: () => _exportToTaglist(controller),
+                      child: Text(controller)),
+                ...tags.where((element) => element.alarm.isActive).isNotEmpty
+                    ? [
+                        Text("Create alarms for"),
+                        for (var entry in protocolPrefixes.entries)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(entry.key),
+                              DropdownButton<String>(
+                                isDense: true,
+                                padding: EdgeInsets.zero,
+                                value: entry.value,
+                                onChanged: (value) {
+                                  FocusScope.of(context).unfocus();
+                                  protocolPrefixes[entry.key] = value!;
+                                  setState(() {});
+                                },
+                                items: [
+                                  for (String controller
+                                      in detectedControllerTypes)
+                                    DropdownMenuItem(
+                                      value: controller,
+                                      child: Text(controller),
+                                    ),
+                                ],
+                              ),
+                              IconButton(
+                                  onPressed: () {
+                                    protocolPrefixes.remove(entry.key);
+                                    //setState(() {});
+                                    update();
+                                  },
+                                  icon: Icon(Icons.remove))
+                            ],
+                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.max,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            SizedBox(
+                                width: 100,
+                                child: TextFormField(
+                                  decoration: InputDecoration(
+                                      helperText: "Press enter to add",
+                                      labelText: "New prefix"),
+                                  onFieldSubmitted: (value) {
+                                    protocolPrefixes[value] =
+                                        detectedControllerTypes.first;
+                                    //setState(() {});
+
+                                    update();
+                                  },
+                                )),
+                          ],
+                        ),
+                        TextButton(
+                            onPressed: () => _exportToAlarmList(),
+                            child: const Text("Export to alarm list"))
+                      ]
+                    : []
+              ],
+            );
+          },
+        ), //() => _exportToTaglist(),
         child: Column(
           children: [
             Text(
@@ -344,10 +570,10 @@ class _HomePageState extends State<HomePage> {
             const Icon(Icons.download),
           ],
         ),
-      ),
+      ),*/
       appBar: AppBar(
-          title: const Text('Taglist converter'),
-          leading: IconButton(
+        title: const Text('Taglist converter'),
+        /*leading: IconButton(
             icon: const Icon(Icons.menu),
             onPressed: () {
               showMenu(
@@ -387,8 +613,8 @@ class _HomePageState extends State<HomePage> {
                   value();
                 } else {}
               });
-            },
-          )),
+            },*/
+      ),
       body: !listLoaded
           ? Center(
               child: Column(
@@ -434,34 +660,38 @@ class _HomePageState extends State<HomePage> {
                         Widget sizedBox = SizedBox(
                           width: columns[entry.key],
                           //height: 48,
-                          child: Row(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                                border: Border.all(color: Colors.transparent)),
+                            child: Row(
 
-                              //mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(entry.key),
-                                switch (entry.key) {
-                                  "Function group" => GestureDetector(
-                                      onTapDown: (details) => _showFilterMenu(
-                                          entry.key, entry.value, details),
-                                      child: Icon(Icons.filter_list,
-                                          color: functionGroupFilter != ""
-                                              ? Colors.green
-                                              : null)),
-                                  "Data type" => GestureDetector(
-                                      onTapDown: (details) => _showFilterMenu(
-                                          entry.key, entry.value, details),
-                                      child: Icon(Icons.filter_list,
-                                          color: dataTypeFilter != ""
-                                              ? Colors.green
-                                              : null)),
-                                  "Controller function name" => IconButton(
-                                      onPressed: () => setState(() {
-                                            searchActive = true;
-                                          }),
-                                      icon: const Icon(Icons.search)),
-                                  String() => const SizedBox.shrink(),
-                                }
-                              ]),
+                                //mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(entry.key),
+                                  switch (entry.key) {
+                                    "Function group" => GestureDetector(
+                                        onTapDown: (details) => _showFilterMenu(
+                                            entry.key, entry.value, details),
+                                        child: Icon(Icons.filter_list,
+                                            color: functionGroupFilter != ""
+                                                ? Colors.green
+                                                : null)),
+                                    "Data type" => GestureDetector(
+                                        onTapDown: (details) => _showFilterMenu(
+                                            entry.key, entry.value, details),
+                                        child: Icon(Icons.filter_list,
+                                            color: dataTypeFilter != ""
+                                                ? Colors.green
+                                                : null)),
+                                    "Controller function name" => IconButton(
+                                        onPressed: () => setState(() {
+                                              searchActive = true;
+                                            }),
+                                        icon: const Icon(Icons.search)),
+                                    String() => const SizedBox.shrink(),
+                                  }
+                                ]),
+                          ),
                         );
                         return sizedBox;
                       }).toList(),
@@ -495,7 +725,7 @@ class _HomePageState extends State<HomePage> {
                 Expanded(
                   child: ListView.builder(
                     itemCount: visibleTags.length,
-                    itemExtent: 48,
+                    itemExtent: 64,
                     itemBuilder: (context, index) {
                       return Card(
                         color: visibleTags[index].selected
@@ -504,6 +734,7 @@ class _HomePageState extends State<HomePage> {
                         child: ListTile(
                           dense: true,
                           title: Row(
+                            mainAxisAlignment: MainAxisAlignment.start,
                             children: [
                               SizedBox(
                                   width: columns["Function group"],
@@ -522,10 +753,50 @@ class _HomePageState extends State<HomePage> {
                                   width: columns["Data type"],
                                   child: Text(visibleTags[index].dataType)),
                               SizedBox(
-                                  width: columns["Selected"],
-                                  child: Icon(visibleTags[index].selected
-                                      ? Icons.check_box
-                                      : Icons.indeterminate_check_box)),
+                                width: columns["Alarm"],
+                                child: Row(
+                                  children: [
+                                    IconButton(
+                                        onPressed: () {
+                                          visibleTags[index].alarm.isActive =
+                                              !visibleTags[index]
+                                                  .alarm
+                                                  .isActive;
+                                          setState(() {});
+                                        },
+                                        icon: visibleTags[index].alarm.isActive
+                                            ? Icon(Icons.notifications_active,
+                                                color: Colors.red)
+                                            : Icon(Icons.notification_add)),
+                                    visibleTags[index].alarm.isActive
+                                        ? AlarmEditor(
+                                            tag: visibleTags[index],
+                                            onCopyToAll: (value) {
+                                              for (var tag in visibleTags) {
+                                                tag.alarm =
+                                                    Alarm.fromOther(value);
+                                              }
+                                              setState(() {});
+                                            },
+                                          )
+                                        : SizedBox.shrink(),
+                                  ],
+                                ),
+                              ),
+
+                              /*
+                              alarmIsCopied
+                                  ? SizedBox(
+                                      width: columns["Selected"],
+                                      child: IconButton(
+                                        icon: Icon(Icons.paste),
+                                        onPressed: () => setState(() {
+                                          visibleTags[index].alarm =
+                                              Alarm.fromOther(alarmToCopy);
+                                          //alarmIsCopied = false;
+                                        }),
+                                      ))
+                                  : SizedBox.shrink()*/
                             ],
                           ),
                           onTap: () {
@@ -567,43 +838,6 @@ List indexFilter(Map map, String keyToFilter, var filter) {
   return indexFilter;
 }
 
-class Tag {
-  String name;
-  String functionGroup;
-  String plcAddress;
-  String bit;
-  String dataType;
-  List controllerTypes;
-  bool selected;
-  bool visible;
-
-  Tag(this.name, this.functionGroup, this.plcAddress, this.bit, this.dataType,
-      this.controllerTypes, this.selected, this.visible);
-
-  Tag.fromJsonMap(Map json)
-      : name = json["name"],
-        functionGroup = json["functionGroup"],
-        plcAddress = json["plcAddress"],
-        bit = json["bit"],
-        dataType = json["dataType"],
-        controllerTypes = json["controllerTypes"],
-        selected = json["selected"],
-        visible = json["visible"];
-
-  toJsonMap() {
-    return {
-      "name": name,
-      "functionGroup": functionGroup,
-      "plcAddress": plcAddress,
-      "bit": bit,
-      "dataType": dataType,
-      "controllerTypes": controllerTypes,
-      "selected": selected,
-      "visible": visible,
-    };
-  }
-}
-
 List<Tag> sheetmapToTags(Map sheetmap, List detectedControllerTypes) {
   List<Tag> tags = [];
   for (var i = 0; i < sheetmap.values.first.length; i++) {
@@ -619,9 +853,240 @@ List<Tag> sheetmapToTags(Map sheetmap, List detectedControllerTypes) {
         sheetmap["PLC address"][i],
         sheetmap["Bit"][i],
         sheetmap["Data type"][i],
+        sheetmap["Function code"][i],
         controllers,
         false,
-        true));
+        false,
+        Alarm.empty()));
   }
   return tags;
+}
+
+List<SizedBox> editableFields(BuildContext context, Map fields) {
+  List<SizedBox> textFormFields = [];
+  for (var i = 0; i < fields.length; i++) {
+    textFormFields.add(SizedBox(
+      width: 100,
+      child: TextFormField(
+        keyboardType: fields.values.elementAt(i).runtimeType == double
+            ? TextInputType.number
+            : null,
+        initialValue: fields.values.elementAt(i).toString(),
+        decoration: InputDecoration(
+            labelText: fields.keys.elementAt(i).toString(),
+            isDense: true,
+            contentPadding: EdgeInsets.all(4)),
+
+        //onTapOutside: (event) => print("tapped outside"),
+
+        onChanged: (value) {
+          if (fields.values.elementAt(i).runtimeType == double) {
+            try {
+              fields[fields.keys.elementAt(i)] = double.parse(value);
+            } catch (e) {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text(e.toString())));
+            }
+          }
+          if (fields.values.elementAt(i).runtimeType == String) {
+            fields[fields.keys.elementAt(i)] = value;
+          }
+        },
+      ),
+    ));
+  }
+  return textFormFields;
+}
+
+class AlarmEditor extends StatefulWidget {
+  AlarmEditor({super.key, required this.tag, required this.onCopyToAll});
+  Tag tag;
+  Function onCopyToAll;
+  @override
+  State<AlarmEditor> createState() => _AlarmEditorState();
+}
+
+class _AlarmEditorState extends State<AlarmEditor> {
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 150,
+          child: DropdownButton<String>(
+            isDense: true,
+            padding: EdgeInsets.zero,
+            value: widget.tag.alarm.alarmType,
+            onChanged: (value) {
+              FocusScope.of(context).unfocus();
+              widget.tag.alarm.alarmType = value!;
+              setState(() {});
+            },
+            items: const [
+              DropdownMenuItem(
+                value: "limitAlarm",
+                child: Text("Limit Alarm"),
+              ),
+              DropdownMenuItem(
+                value: "bitMaskAlarm",
+                child: Text("Bit Mask Alarm"),
+              ),
+              DropdownMenuItem(
+                value: "deviationAlarm",
+                child: Text("Deviation Alarm"),
+              ),
+              DropdownMenuItem(
+                value: "valueAlarm",
+                child: Text("Value Alarm"),
+              ),
+            ],
+          ),
+        ),
+        ...switch (widget.tag.alarm.alarmType) {
+          "limitAlarm" => [
+              SizedBox(
+                width: 100,
+                child: TextFormField(
+                    keyboardType: TextInputType.number,
+                    initialValue: widget.tag.alarm.minLimit.toString(),
+                    decoration: InputDecoration(
+                        labelText: "Min limit",
+                        isDense: true,
+                        contentPadding: EdgeInsets.all(4)),
+
+                    //onTapOutside: (event) => print("tapped outside"),
+
+                    onChanged: (value) {
+                      try {
+                        widget.tag.alarm.minLimit = double.parse(value);
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(e.toString())));
+                      }
+                    }),
+              ),
+              SizedBox(
+                width: 100,
+                child: TextFormField(
+                    keyboardType: TextInputType.number,
+                    initialValue: widget.tag.alarm.maxLimit.toString(),
+                    decoration: InputDecoration(
+                        labelText: "Max limit",
+                        isDense: true,
+                        contentPadding: EdgeInsets.all(4)),
+                    onChanged: (value) {
+                      try {
+                        widget.tag.alarm.maxLimit = double.parse(value);
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(e.toString())));
+                      }
+                    }),
+              ),
+            ],
+          "bitMaskAlarm" => [
+              SizedBox(
+                width: 150,
+                child: TextFormField(
+                    keyboardType: TextInputType.number,
+                    initialValue: widget.tag.alarm.bitPositions.toString(),
+                    decoration: InputDecoration(
+                        labelText: "Bit positions",
+                        isDense: true,
+                        contentPadding: EdgeInsets.all(4)),
+                    onChanged: (value) {
+                      try {
+                        widget.tag.alarm.bitPositions = value;
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(e.toString())));
+                      }
+                    }),
+              ),
+            ],
+          "deviationAlarm" => [
+              SizedBox(
+                width: 100,
+                child: TextFormField(
+                    keyboardType: TextInputType.number,
+                    initialValue: widget.tag.alarm.setpoint.toString(),
+                    decoration: InputDecoration(
+                        labelText: "Setpoint",
+                        isDense: true,
+                        contentPadding: EdgeInsets.all(4)),
+                    onChanged: (value) {
+                      try {
+                        widget.tag.alarm.setpoint = double.parse(value);
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(e.toString())));
+                      }
+                    }),
+              ),
+              SizedBox(
+                width: 100,
+                child: TextFormField(
+                    keyboardType: TextInputType.number,
+                    initialValue: widget.tag.alarm.deviation.toString(),
+                    decoration: InputDecoration(
+                        labelText: "Deviation %",
+                        isDense: true,
+                        contentPadding: EdgeInsets.all(4)),
+                    onChanged: (value) {
+                      try {
+                        widget.tag.alarm.deviation = double.parse(value);
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(e.toString())));
+                      }
+                    }),
+              ),
+            ],
+          "valueAlarm" => [
+              SizedBox(
+                width: 100,
+                child: TextFormField(
+                    keyboardType: TextInputType.number,
+                    initialValue: widget.tag.alarm.value.toString(),
+                    decoration: InputDecoration(
+                        labelText: "Value",
+                        isDense: true,
+                        contentPadding: EdgeInsets.all(4)),
+                    onChanged: (value) {
+                      try {
+                        widget.tag.alarm.value = double.parse(value);
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(e.toString())));
+                      }
+                    }),
+              ),
+            ],
+          String() => [],
+        },
+        GestureDetector(
+            onTapDown: (details) => showMenu(
+                    context: context,
+                    position: RelativeRect.fromLTRB(
+                        details.globalPosition.dx,
+                        details.globalPosition.dy,
+                        details.globalPosition.dx,
+                        details.globalPosition.dy),
+                    items: [
+                      PopupMenuItem(
+                          value: widget.onCopyToAll,
+                          child: Text("Copy alarm to all in current list"))
+                    ]).then(
+                  (value) {
+                    if (value == null) {
+                      return;
+                    } else {
+                      value(widget.tag.alarm);
+                    }
+                  },
+                ),
+            child: Icon(Icons.more_horiz))
+      ],
+    );
+  }
 }
