@@ -1,5 +1,3 @@
-//add subindex
-
 import '../classes/tag.dart';
 
 String xmlTagString(List<Tag> tags, bool isZeroBased) {
@@ -8,11 +6,12 @@ String xmlTagString(List<Tag> tags, bool isZeroBased) {
 
   for (Tag tag in tags) {
     String tagname = tag.name;
+    tagname = tagname.replaceAll('&', '&#38;');
     tagname = tagname.replaceAll('>', '&gt;');
     tagname = tagname.replaceAll('<', '&lt;');
     tagname = tagname.replaceAll('°', 'degrees');
     tagname = tagname.replaceAll('.', ',');
-    tagname = tagname.replaceAll('&', '&#38;');
+
     tagname += " -${tag.functionCode}";
     String offset = isZeroBased
         ? (int.parse(tag.plcAddress) - 1).toString()
@@ -154,20 +153,26 @@ String alarmStringXML(Map protocolPrefixes, List<Tag> tags) {
   String myXmlString = "<alarms>\n\t";
   String xmlEnd = "</alarms>";
   for (var prefix in protocolPrefixes.entries) {
-    //int i = 0;
+    int i = 0;
     for (Tag tag in tags.where((tag) =>
         tag.alarm.isActive && tag.controllerTypes.contains(prefix.value))) {
-      String tagname = "${prefix.key}/${tag.name}";
+      String tagname = tag.name;
+      if (prefix.key != "") {
+        tagname = "${prefix.key}/${tag.name}";
+      }
+
+      tagname = tagname.replaceAll('&', '&#38;');
       tagname = tagname.replaceAll('>', '&gt;');
       tagname = tagname.replaceAll('<', '&lt;');
       tagname = tagname.replaceAll('°', 'degrees');
       tagname = tagname.replaceAll('.', ',');
-      tagname = tagname.replaceAll('&', '&#38;');
+
       tagname += " -${tag.functionCode}";
       String alarmname = tagname.split('-F').first;
+      //alarmname = alarmname.replaceAll(RegExp(r'[,./!?:"]'), '_');
       String text = '''
 <alarm eventBuffer="AlarmBuffer1" logToEventArchive="true" eventType="14" subType="1" storeAlarmInfo="true">
-  <name>$alarmname</name>
+  <name>Alarm_${prefix.key}_$i</name>
   <groups></groups>
   <source>$tagname</source>
   <alarmType>${tag.alarm.alarmType}</alarmType>
@@ -188,10 +193,10 @@ String alarmStringXML(Map protocolPrefixes, List<Tag> tags) {
   <printMask>1</printMask>
   <customFields>
     <customField_1>
-      <L1 langName="Lang1">[${tag.name}]</L1>
+      <L1 langName="Lang1">[$tagname]</L1>
     </customField_1>
     <customField_2>
-      <L1 langName="Lang1"></L1>
+      <L1 langName="Lang1">$alarmname</L1>
     </customField_2>
   </customFields>
   <colors>
@@ -229,7 +234,7 @@ String alarmStringXML(Map protocolPrefixes, List<Tag> tags) {
 </alarm>
 ''';
       myXmlString += text;
-      //i++;
+      i++;
     }
   }
 

@@ -104,10 +104,87 @@ class _HomePageState extends State<HomePage> {
     protocolPrefixes = {};
     listLoaded = false;
     _resetFiltersAndSearch();
+    setState(() {});
   }
 
   void _toggleZeroOneBased() {
     zeroBased = !zeroBased;
+    setState(() {});
+  }
+
+  void _readFromExcel(String path) {
+    _closeCurrentSetup();
+    Uint8List bytes = File(path).readAsBytesSync();
+    exc.Excel excel = exc.Excel.decodeBytes(bytes);
+    List<exc.Sheet> sheets = excel.tables.values.toList()..removeAt(0);
+
+    for (var sheet in sheets) {
+      //Remove header rows
+      sheet.removeRow(0);
+      sheet.removeRow(0);
+      sheet.removeRow(0);
+      //Clean up empty rows at the end that appear when deleting header rows
+      sheet.removeRow(sheet.maxRows - 1);
+      sheet.removeRow(sheet.maxRows - 1);
+      sheet.removeRow(sheet.maxRows - 1);
+    }
+
+    //Convert sheets to maps
+    Map discreteOutputMap = createMapFromSheet(sheets[0]);
+    Map discreteInputMap = createMapFromSheet(sheets[1]);
+    Map holdingRegisterMap = createMapFromSheet(sheets[2]);
+    Map inputRegisterMap = createMapFromSheet(sheets[3]);
+
+    detectedControllerTypes = [];
+    for (String element in discreteInputMap.keys) {
+      if (possibleControllerTypes.contains(element)) {
+        detectedControllerTypes.add(element);
+      }
+    }
+
+    if (detectedControllerTypes.isNotEmpty) {
+      activeController = detectedControllerTypes.first;
+      for (String controller in detectedControllerTypes) {
+        protocolPrefixes["${controller}1"] = controller;
+      }
+    }
+
+    //Add function code
+    discreteOutputMap["Function code"] =
+        List.filled(discreteOutputMap["PLC address"]!.length, "F01");
+    discreteInputMap["Function code"] =
+        List.filled(discreteInputMap["PLC address"]!.length, "F02");
+    holdingRegisterMap["Function code"] =
+        List.filled(holdingRegisterMap["PLC address"]!.length, "F03");
+    inputRegisterMap["Function code"] =
+        List.filled(inputRegisterMap["PLC address"]!.length, "F04");
+
+    //Add data type to INP ond OUTP
+    discreteOutputMap["Data type"] =
+        List.filled(discreteOutputMap["PLC address"]!.length, "BOOL");
+    discreteInputMap["Data type"] =
+        List.filled(discreteInputMap["PLC address"]!.length, "BOOL");
+    //Add bit to INP and OUTP (just for formatting)
+    discreteOutputMap["Bit"] =
+        List.filled(discreteOutputMap["PLC address"]!.length, "");
+    discreteInputMap["Bit"] =
+        List.filled(discreteInputMap["PLC address"]!.length, "");
+
+    tags.addAll(sheetmapToTags(discreteInputMap, detectedControllerTypes));
+    tags.addAll(sheetmapToTags(discreteOutputMap, detectedControllerTypes));
+    tags.addAll(sheetmapToTags(holdingRegisterMap, detectedControllerTypes));
+    tags.addAll(sheetmapToTags(inputRegisterMap, detectedControllerTypes));
+
+    for (var tag in tags) {
+      if (!filterValues["Function groups"].contains(tag.functionGroup)) {
+        filterValues["Function groups"].add(tag.functionGroup);
+      }
+
+      if (!filterValues["Data types"].contains(tag.dataType)) {
+        filterValues["Data types"].add(tag.dataType);
+      }
+    }
+    listLoaded = true;
     setState(() {});
   }
 
@@ -140,27 +217,35 @@ class _HomePageState extends State<HomePage> {
     return false;
   }
 
-  Future<void> _readFromJson() async {
+  Future<void> _readFromJson(String path) async {
+    _closeCurrentSetup();
+    var bytes = File(path).readAsBytesSync();
+    String jsonString = String.fromCharCodes(bytes);
+    Map jsonMap = jsonDecode(jsonString);
+
+    detectedControllerTypes = jsonMap["Detected controllers"];
+    filterValues = jsonMap["Filter values"];
+    for (var element in jsonMap["Tags"]) {
+      Tag tag = Tag.fromJsonMap(element);
+      tags.add(tag);
+    }
+
+    activeController = detectedControllerTypes[0];
+    listLoaded = true;
+    setState(() {});
+  }
+
+  Future<void> _openFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['json'],
+      allowedExtensions: ['xlsx', 'json'],
     );
     if (result != null) {
-      _closeCurrentSetup();
-      var bytes = File(result.paths[0]!).readAsBytesSync();
-      String jsonString = String.fromCharCodes(bytes);
-      Map jsonMap = jsonDecode(jsonString);
-
-      detectedControllerTypes = jsonMap["Detected controllers"];
-      filterValues = jsonMap["Filter values"];
-      for (var element in jsonMap["Tags"]) {
-        Tag tag = Tag.fromJsonMap(element);
-        tags.add(tag);
+      if (result.paths[0]?.split(".").last == "json") {
+        _readFromJson(result.paths[0]!);
+      } else {
+        _readFromExcel(result.paths[0]!);
       }
-
-      activeController = detectedControllerTypes[0];
-      listLoaded = true;
-      setState(() {});
     }
   }
 
@@ -186,7 +271,6 @@ class _HomePageState extends State<HomePage> {
       allowedExtensions: ['xml'],
     );
     if (result != null) {
-      File file = File("$result.xml");
       File alarmFile = File("$result.xml");
 
       alarmFile.writeAsString(alarmStringXML(
@@ -261,91 +345,21 @@ class _HomePageState extends State<HomePage> {
     setState(() {});
   }
 
-  void update() {
+  void _addAlarmToVisible(List<Tag> visibleTags) {
+    for (var i = 0; i < visibleTags.length; i++) {
+      visibleTags[i].alarm.isActive = true;
+    }
     setState(() {});
   }
 
-  Future<void> _selectFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['xlsx'],
-    );
-    if (result != null) {
-      _closeCurrentSetup();
-      Uint8List bytes = File(result.paths[0]!).readAsBytesSync();
-      exc.Excel excel = exc.Excel.decodeBytes(bytes);
-      List<exc.Sheet> sheets = excel.tables.values.toList()..removeAt(0);
-
-      for (var sheet in sheets) {
-        //Remove header rows
-        sheet.removeRow(0);
-        sheet.removeRow(0);
-        sheet.removeRow(0);
-        //Clean up empty rows at the end that appear when deleting header rows
-        sheet.removeRow(sheet.maxRows - 1);
-        sheet.removeRow(sheet.maxRows - 1);
-        sheet.removeRow(sheet.maxRows - 1);
-      }
-
-      //Convert sheets to maps
-      Map discreteOutputMap = createMapFromSheet(sheets[0]);
-      Map discreteInputMap = createMapFromSheet(sheets[1]);
-      Map holdingRegisterMap = createMapFromSheet(sheets[2]);
-      Map inputRegisterMap = createMapFromSheet(sheets[3]);
-
-      detectedControllerTypes = [];
-      for (String element in discreteInputMap.keys) {
-        if (possibleControllerTypes.contains(element)) {
-          detectedControllerTypes.add(element);
-        }
-      }
-
-      if (detectedControllerTypes.isNotEmpty) {
-        activeController = detectedControllerTypes.first;
-        for (String controller in detectedControllerTypes) {
-          protocolPrefixes[controller + "1"] = controller;
-        }
-      }
-
-      //Add function code
-      discreteOutputMap["Function code"] =
-          List.filled(discreteOutputMap["PLC address"]!.length, "F01");
-      discreteInputMap["Function code"] =
-          List.filled(discreteInputMap["PLC address"]!.length, "F02");
-      holdingRegisterMap["Function code"] =
-          List.filled(holdingRegisterMap["PLC address"]!.length, "F03");
-      inputRegisterMap["Function code"] =
-          List.filled(inputRegisterMap["PLC address"]!.length, "F04");
-
-      //Add data type to INP ond OUTP
-      discreteOutputMap["Data type"] =
-          List.filled(discreteOutputMap["PLC address"]!.length, "BOOL");
-      discreteInputMap["Data type"] =
-          List.filled(discreteInputMap["PLC address"]!.length, "BOOL");
-      //Add bit to INP and OUTP (just for formatting)
-      discreteOutputMap["Bit"] =
-          List.filled(discreteOutputMap["PLC address"]!.length, "");
-      discreteInputMap["Bit"] =
-          List.filled(discreteInputMap["PLC address"]!.length, "");
-
-      tags.addAll(sheetmapToTags(discreteInputMap, detectedControllerTypes));
-      tags.addAll(sheetmapToTags(discreteOutputMap, detectedControllerTypes));
-      tags.addAll(sheetmapToTags(holdingRegisterMap, detectedControllerTypes));
-      tags.addAll(sheetmapToTags(inputRegisterMap, detectedControllerTypes));
-
-      for (var tag in tags) {
-        if (!filterValues["Function groups"].contains(tag.functionGroup)) {
-          filterValues["Function groups"].add(tag.functionGroup);
-        }
-
-        if (!filterValues["Data types"].contains(tag.dataType)) {
-          filterValues["Data types"].add(tag.dataType);
-        }
-      }
-      listLoaded = true;
-      setState(() {});
+  void _removeAlarmFromVisible(List<Tag> visibleTags) {
+    for (var i = 0; i < visibleTags.length; i++) {
+      visibleTags[i].alarm.isActive = false;
     }
+    setState(() {});
   }
+
+  //ExpansionTileController searchExpanseController = ExpansionTileController();
 
   @override
   Widget build(BuildContext context) {
@@ -375,253 +389,162 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       drawer: Drawer(
         child: ListView(children: [
-          ListTile(
-            onTap: () {
-              showMenu(
-                  context: context,
-                  position: const RelativeRect.fromLTRB(0, 0, 0, 0),
-                  items: [
-                    PopupMenuItem(
-                        value: _selectFile,
-                        child: const Text('Open modbus list')),
-                    const PopupMenuItem(
-                        enabled: false,
-                        height: 2,
-                        child: PopupMenuDivider(height: 2)),
-                    PopupMenuItem(
-                        value: _saveAsJson,
-                        child: const Text('Save setup as Json')),
-                    PopupMenuItem(
-                        value: _readFromJson,
-                        child: const Text('Load setup from Json')),
-                    const PopupMenuItem(
-                        enabled: false,
-                        height: 2,
-                        child: PopupMenuDivider(height: 2)),
-                    PopupMenuItem(
-                        value: () {
-                          _closeCurrentSetup();
-                          setState(() {});
-                          return true;
-                        },
-                        child: const Text('Close current setup')),
-                    PopupMenuItem(
-                        value: _toggleZeroOneBased,
-                        child: Text(
-                            "Toggle zero/one based (currently ${zeroBased ? "zero" : "one"} based)")),
-                  ]).then((value) {
-                if (value != null) {
-                  value();
-                } else {}
-              });
-            },
-            title: Text("File"),
+          ExpansionTile(
+            title: const Text("File"),
+            children: [
+              ListTile(
+                onTap: () => _openFile(),
+                title: const Text("Open file (xlsx or json)"),
+              ),
+              ListTile(
+                onTap: () => _saveAsJson(),
+                title: const Text("Save as Json"),
+              ),
+              ListTile(
+                onTap: () => _closeCurrentSetup(),
+                title: const Text("Close"),
+              ),
+            ],
           ),
-          Divider(
+          const Divider(
             height: 2,
           ),
-          ...listLoaded
-              ? [
-                  ListTile(title: Text("Create tags for")),
-                  for (String controller in detectedControllerTypes)
-                    TextButton(
-                        onPressed: () => _exportToTaglist(controller),
-                        child: Text(controller)),
-                  ...[
-                    ListTile(title: Text("Create alarms for")),
-                    for (var entry in protocolPrefixes.entries)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(entry.key),
-                          DropdownButton<String>(
-                            isDense: true,
-                            padding: EdgeInsets.zero,
-                            value: entry.value,
-                            onChanged: (value) {
-                              FocusScope.of(context).unfocus();
-                              protocolPrefixes[entry.key] = value!;
-                              setState(() {});
-                            },
-                            items: [
-                              for (String controller in detectedControllerTypes)
-                                DropdownMenuItem(
-                                  value: controller,
-                                  child: Text(controller),
-                                ),
-                            ],
-                          ),
-                          IconButton(
-                              onPressed: () {
-                                protocolPrefixes.remove(entry.key);
-                                setState(() {});
-                                //update();
-                              },
-                              icon: Icon(Icons.remove))
-                        ],
-                      ),
-                    Row(
-                      mainAxisSize: MainAxisSize.max,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        SizedBox(
-                            width: 200,
-                            child: TextFormField(
-                              decoration: InputDecoration(
-                                  helperText: "Press enter to add",
-                                  labelText: "New prefix"),
-                              onFieldSubmitted: (value) {
-                                protocolPrefixes[value] =
-                                    detectedControllerTypes.first;
-                                setState(() {});
-
-                                //update();
-                              },
-                            )),
-                      ],
-                    ),
-                    TextButton(
-                        onPressed: () => _exportToAlarmList(),
-                        child: const Text("Create alarm list"))
-                  ]
-                ]
-              : [],
-        ]),
-      ),
-      /*floatingActionButton: FloatingActionButton(
-        onPressed: () => showDialog(
-          context: context,
-          builder: (context) {
-            return SimpleDialog(
-              children: [
-                Text("Create tags for"),
-                for (String controller in detectedControllerTypes)
-                  TextButton(
-                      onPressed: () => _exportToTaglist(controller),
-                      child: Text(controller)),
-                ...tags.where((element) => element.alarm.isActive).isNotEmpty
-                    ? [
-                        Text("Create alarms for"),
+          ExpansionTile(
+            title: const Text("Settings"),
+            children: [
+              ListTile(
+                title: const Text("Zero-based"),
+                trailing: Switch(
+                    value: zeroBased,
+                    onChanged: (value) => setState(() => zeroBased = value)),
+              ),
+            ],
+          ),
+          ExpansionTile(
+            title: const Text("Export"),
+            children: [
+              ...tags.where((element) => element.selected).isNotEmpty
+                  ? [
+                      const ListTile(title: Text("Create tags for")),
+                      for (String controller in detectedControllerTypes)
+                        TextButton(
+                            onPressed: () => _exportToTaglist(controller),
+                            child: Text(controller)),
+                      ...[
+                        const ListTile(title: Text("Create alarms for")),
                         for (var entry in protocolPrefixes.entries)
-                          Row(
+                          ListTile(
+                            title: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(entry.key),
+                                DropdownButton<String>(
+                                  isDense: true,
+                                  padding: EdgeInsets.zero,
+                                  value: entry.value,
+                                  onChanged: (value) {
+                                    FocusScope.of(context).unfocus();
+                                    protocolPrefixes[entry.key] = value!;
+                                    setState(() {});
+                                  },
+                                  items: [
+                                    for (String controller
+                                        in detectedControllerTypes)
+                                      DropdownMenuItem(
+                                        value: controller,
+                                        child: Text(controller),
+                                      ),
+                                  ],
+                                ),
+                                IconButton(
+                                    onPressed: () {
+                                      protocolPrefixes.remove(entry.key);
+                                      setState(() {});
+                                      //update();
+                                    },
+                                    icon: const Icon(Icons.remove))
+                              ],
+                            ),
+                          ),
+                        ListTile(
+                          title: Row(
+                            mainAxisSize: MainAxisSize.max,
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(entry.key),
-                              DropdownButton<String>(
-                                isDense: true,
-                                padding: EdgeInsets.zero,
-                                value: entry.value,
-                                onChanged: (value) {
-                                  FocusScope.of(context).unfocus();
-                                  protocolPrefixes[entry.key] = value!;
-                                  setState(() {});
-                                },
-                                items: [
-                                  for (String controller
-                                      in detectedControllerTypes)
-                                    DropdownMenuItem(
-                                      value: controller,
-                                      child: Text(controller),
-                                    ),
-                                ],
-                              ),
-                              IconButton(
-                                  onPressed: () {
-                                    protocolPrefixes.remove(entry.key);
-                                    //setState(() {});
-                                    update();
-                                  },
-                                  icon: Icon(Icons.remove))
+                              SizedBox(
+                                  width: 200,
+                                  child: TextFormField(
+                                    decoration: const InputDecoration(
+                                        helperText: "Press enter to add",
+                                        labelText: "New prefix"),
+                                    onFieldSubmitted: (value) {
+                                      protocolPrefixes[value] =
+                                          detectedControllerTypes.first;
+                                      setState(() {});
+
+                                      //update();
+                                    },
+                                  )),
                             ],
                           ),
-                        Row(
-                          mainAxisSize: MainAxisSize.max,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            SizedBox(
-                                width: 100,
-                                child: TextFormField(
-                                  decoration: InputDecoration(
-                                      helperText: "Press enter to add",
-                                      labelText: "New prefix"),
-                                  onFieldSubmitted: (value) {
-                                    protocolPrefixes[value] =
-                                        detectedControllerTypes.first;
-                                    //setState(() {});
-
-                                    update();
-                                  },
-                                )),
-                          ],
                         ),
                         TextButton(
                             onPressed: () => _exportToAlarmList(),
-                            child: const Text("Export to alarm list"))
+                            child: const Text("Create alarm list"))
                       ]
-                    : []
-              ],
-            );
-          },
-        ), //() => _exportToTaglist(),
-        child: Column(
-          children: [
-            Text(
-                '${visibleTags.where((element) => element.selected).length.toString()}/${visibleTags.length}'),
-            const Icon(Icons.download),
-          ],
-        ),
-      ),*/
+                    ]
+                  : [const Text("Select some tags first")]
+            ],
+          ),
+        ]),
+      ),
       appBar: AppBar(
-        title: const Text('Taglist converter'),
-        /*leading: IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () {
-              showMenu(
-                  context: context,
-                  position: const RelativeRect.fromLTRB(0, 0, 0, 0),
-                  items: [
-                    PopupMenuItem(
-                        value: _selectFile,
-                        child: const Text('Open modbus list')),
-                    const PopupMenuItem(
-                        enabled: false,
-                        height: 2,
-                        child: PopupMenuDivider(height: 2)),
-                    PopupMenuItem(
-                        value: _saveAsJson,
-                        child: const Text('Save setup as Json')),
-                    PopupMenuItem(
-                        value: _readFromJson,
-                        child: const Text('Load setup from Json')),
-                    const PopupMenuItem(
-                        enabled: false,
-                        height: 2,
-                        child: PopupMenuDivider(height: 2)),
-                    PopupMenuItem(
-                        value: () {
-                          _closeCurrentSetup();
-                          setState(() {});
-                          return true;
-                        },
-                        child: const Text('Close current setup')),
-                    PopupMenuItem(
-                        value: _toggleZeroOneBased,
-                        child: Text(
-                            "Toggle zero/one based (currently ${zeroBased ? "zero" : "one"} based)")),
-                  ]).then((value) {
-                if (value != null) {
-                  value();
-                } else {}
-              });
-            },*/
+        foregroundColor: Colors.white,
+        backgroundColor: Theme.of(context).primaryColor,
+        //toolbarHeight: 40,
+        title: Row(children: [
+          const Text(
+            "Taglist converter",
+          ),
+          Expanded(child: Container()),
+          ...listLoaded
+              ? {
+                  ["Select all", Icons.check_box]: _selectAllVisible,
+                  ["Deselect all", Icons.check_box_outline_blank]:
+                      _deselectAllVisible,
+                  ["Add alarm to all", Icons.notification_add]:
+                      _addAlarmToVisible,
+                  ["Remove alarm from all", Icons.notifications_off]:
+                      _removeAlarmFromVisible,
+                }
+                  .entries
+                  .map((e) => DecoratedBox(
+                        decoration: const BoxDecoration(
+                          border: Border(
+                              right: BorderSide(width: 1, color: Colors.white)),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 5, right: 5),
+                          child: IconButton(
+                              tooltip: e.key[0] as String,
+                              onPressed: () => e.value(visibleTags),
+                              icon: Icon(e.key[1] as IconData)),
+                        ),
+                      ))
+                  .toList()
+              : [],
+        ]),
       ),
       body: !listLoaded
           ? Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  TextButton(
+                      onPressed: () => _openFile(),
+                      child: const Icon(Icons.folder_open)),
                   const Text(
-                      "Start by loading a DEIF modbuslist in excel format, or a previously saved setup."),
+                      "Start by opening a DEIF modbuslist in excel format, or a previously saved setup."),
                   const Text("Modbuslists can be found on DEIFs webpage"),
                   TextButton(
                       onPressed: () => _launchUrl("https://www.deif.com"),
@@ -637,91 +560,99 @@ class _HomePageState extends State<HomePage> {
             )
           : Column(
               children: [
-                Row(
-                  children: detectedControllerTypes
-                      .map((e) => TextButton(
-                          onPressed: () => setState(() {
-                                activeController = e;
-                              }),
-                          child: Text(e,
-                              style: e == activeController
-                                  ? const TextStyle(
-                                      decoration: TextDecoration.underline)
-                                  : null)))
-                      .toList(),
-                ),
                 ListTile(
-                  dense: true,
-                  title: Row(
-                    //mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      ...columns.entries.map((entry) {
-                        Widget sizedBox = SizedBox(
-                          width: columns[entry.key],
-                          //height: 48,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                                border: Border.all(color: Colors.transparent)),
-                            child: Row(
-
-                                //mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(entry.key),
-                                  switch (entry.key) {
-                                    "Function group" => GestureDetector(
-                                        onTapDown: (details) => _showFilterMenu(
-                                            entry.key, entry.value, details),
-                                        child: Icon(Icons.filter_list,
-                                            color: functionGroupFilter != ""
-                                                ? Colors.green
-                                                : null)),
-                                    "Data type" => GestureDetector(
-                                        onTapDown: (details) => _showFilterMenu(
-                                            entry.key, entry.value, details),
-                                        child: Icon(Icons.filter_list,
-                                            color: dataTypeFilter != ""
-                                                ? Colors.green
-                                                : null)),
-                                    "Controller function name" => IconButton(
-                                        onPressed: () => setState(() {
-                                              searchActive = true;
-                                            }),
-                                        icon: const Icon(Icons.search)),
-                                    String() => const SizedBox.shrink(),
-                                  }
-                                ]),
-                          ),
-                        );
-                        return sizedBox;
-                      }).toList(),
-                      TextButton(
-                          onPressed: () => _selectAllVisible(visibleTags),
-                          child: const Text("Select all")),
-                      TextButton(
-                          onPressed: () => _deselectAllVisible(visibleTags),
-                          child: const Text("Deselect all")),
-                    ],
-                  ),
-                ),
-                searchActive
-                    ? ListTile(
-                        dense: true,
-                        leading: IconButton(
+                  //dense: true,
+                  title: Row(children: [
+                    const Text("Controller type: "),
+                    ...detectedControllerTypes
+                        .map((e) => TextButton(
                             onPressed: () => setState(() {
-                                  searchString = "";
-                                  searchActive = false;
+                                  activeController = e;
+                                }),
+                            child: Text(e,
+                                style: e == activeController
+                                    ? const TextStyle(
+                                        decoration: TextDecoration.underline)
+                                    : null)))
+                        .toList(),
+                  ]),
+                ),
+                DecoratedBox(
+                  decoration: const BoxDecoration(
+                      border: Border(
+                          top: BorderSide(color: Colors.black),
+                          bottom: BorderSide(color: Colors.black))),
+                  child: ListTile(
+                    //dense: true,
+                    subtitle: searchActive
+                        ? ListTile(
+                            //dense: true,
+                            leading: IconButton(
+                                onPressed: () => setState(() {
+                                      searchActive = false;
+                                      searchString = "";
+                                      setState(() {});
+                                    }),
+                                icon: const Icon(Icons.close)),
+                            title: TextField(
+                                autofocus: true,
+                                onChanged: (value) {
+                                  searchString = value;
                                   setState(() {});
                                 }),
-                            icon: const Icon(Icons.close)),
-                        title: TextField(
-                            autofocus: true,
-                            onChanged: (value) {
-                              searchString = value;
-                              setState(() {});
-                            }),
-                      )
-                    : const SizedBox.shrink(),
+                          )
+                        : null,
+
+                    title: Row(
+                      //mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        ...columns.entries.map((entry) {
+                          Widget sizedBox = SizedBox(
+                            width: columns[entry.key],
+                            //height: 48,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                  border:
+                                      Border.all(color: Colors.transparent)),
+                              child: Row(
+
+                                  //mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(entry.key),
+                                    switch (entry.key) {
+                                      "Function group" => GestureDetector(
+                                          onTapDown: (details) =>
+                                              _showFilterMenu(entry.key,
+                                                  entry.value, details),
+                                          child: Icon(Icons.filter_list,
+                                              color: functionGroupFilter != ""
+                                                  ? Colors.green
+                                                  : null)),
+                                      "Data type" => GestureDetector(
+                                          onTapDown: (details) =>
+                                              _showFilterMenu(entry.key,
+                                                  entry.value, details),
+                                          child: Icon(Icons.filter_list,
+                                              color: dataTypeFilter != ""
+                                                  ? Colors.green
+                                                  : null)),
+                                      "Controller function name" => IconButton(
+                                          onPressed: () => setState(() {
+                                                searchActive = true;
+                                              }),
+                                          icon: const Icon(Icons.search)),
+                                      String() => const SizedBox.shrink(),
+                                    }
+                                  ]),
+                            ),
+                          );
+                          return sizedBox;
+                        }).toList(),
+                      ],
+                    ),
+                  ),
+                ),
                 Expanded(
                   child: ListView.builder(
                     itemCount: visibleTags.length,
@@ -765,9 +696,11 @@ class _HomePageState extends State<HomePage> {
                                           setState(() {});
                                         },
                                         icon: visibleTags[index].alarm.isActive
-                                            ? Icon(Icons.notifications_active,
+                                            ? const Icon(
+                                                Icons.notifications_active,
                                                 color: Colors.red)
-                                            : Icon(Icons.notification_add)),
+                                            : const Icon(
+                                                Icons.notification_add)),
                                     visibleTags[index].alarm.isActive
                                         ? AlarmEditor(
                                             tag: visibleTags[index],
@@ -779,7 +712,7 @@ class _HomePageState extends State<HomePage> {
                                               setState(() {});
                                             },
                                           )
-                                        : SizedBox.shrink(),
+                                        : const SizedBox.shrink(),
                                   ],
                                 ),
                               ),
@@ -808,6 +741,39 @@ class _HomePageState extends State<HomePage> {
                         ),
                       );
                     },
+                  ),
+                ),
+                DecoratedBox(
+                  decoration: const BoxDecoration(
+                      border: Border(top: BorderSide(color: Colors.black))),
+                  //bottom: BorderSide(color: Colors.black)))
+                  child: ListTile(
+                    dense: true,
+                    title: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: {
+                        "Selected tags":
+                            tags.where((element) => element.selected).length,
+                        "Selected tags with alarm": tags
+                            .where((element) =>
+                                element.selected && element.alarm.isActive)
+                            .length,
+                        "Tags in current view": visibleTags.length,
+                        "Current filters":
+                            "$dataTypeFilter $functionGroupFilter"
+                      }
+                          .entries
+                          .map((e) => Text("${e.key}: ${e.value}"))
+                          .toList(),
+
+                      /*[
+                        Text(
+                            "Selected tags: ${tags.where((element) => element.selected).length}"),
+                        Text(
+                            "Selected tags with alarm: ${tags.where((element) => element.selected && element.alarm.isActive).length}"),
+                        Text("Tags in current view: ${visibleTags.length}")
+                      ],*/
+                    ),
                   ),
                 ),
               ],
@@ -875,7 +841,7 @@ List<SizedBox> editableFields(BuildContext context, Map fields) {
         decoration: InputDecoration(
             labelText: fields.keys.elementAt(i).toString(),
             isDense: true,
-            contentPadding: EdgeInsets.all(4)),
+            contentPadding: const EdgeInsets.all(4)),
 
         //onTapOutside: (event) => print("tapped outside"),
 
@@ -949,7 +915,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
                 child: TextFormField(
                     keyboardType: TextInputType.number,
                     initialValue: widget.tag.alarm.minLimit.toString(),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                         labelText: "Min limit",
                         isDense: true,
                         contentPadding: EdgeInsets.all(4)),
@@ -970,7 +936,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
                 child: TextFormField(
                     keyboardType: TextInputType.number,
                     initialValue: widget.tag.alarm.maxLimit.toString(),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                         labelText: "Max limit",
                         isDense: true,
                         contentPadding: EdgeInsets.all(4)),
@@ -990,7 +956,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
                 child: TextFormField(
                     keyboardType: TextInputType.number,
                     initialValue: widget.tag.alarm.bitPositions.toString(),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                         labelText: "Bit positions",
                         isDense: true,
                         contentPadding: EdgeInsets.all(4)),
@@ -1010,7 +976,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
                 child: TextFormField(
                     keyboardType: TextInputType.number,
                     initialValue: widget.tag.alarm.setpoint.toString(),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                         labelText: "Setpoint",
                         isDense: true,
                         contentPadding: EdgeInsets.all(4)),
@@ -1028,7 +994,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
                 child: TextFormField(
                     keyboardType: TextInputType.number,
                     initialValue: widget.tag.alarm.deviation.toString(),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                         labelText: "Deviation %",
                         isDense: true,
                         contentPadding: EdgeInsets.all(4)),
@@ -1048,7 +1014,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
                 child: TextFormField(
                     keyboardType: TextInputType.number,
                     initialValue: widget.tag.alarm.value.toString(),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                         labelText: "Value",
                         isDense: true,
                         contentPadding: EdgeInsets.all(4)),
@@ -1075,7 +1041,8 @@ class _AlarmEditorState extends State<AlarmEditor> {
                     items: [
                       PopupMenuItem(
                           value: widget.onCopyToAll,
-                          child: Text("Copy alarm to all in current list"))
+                          child:
+                              const Text("Copy alarm to all in current list"))
                     ]).then(
                   (value) {
                     if (value == null) {
@@ -1085,7 +1052,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
                     }
                   },
                 ),
-            child: Icon(Icons.more_horiz))
+            child: const Icon(Icons.more_horiz))
       ],
     );
   }
