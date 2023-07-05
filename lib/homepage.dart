@@ -8,6 +8,7 @@ import 'package:taglist_converter/backend/test.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'classes/alarm.dart';
 import 'classes/tag.dart';
+import 'widgets/alarm_editor.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
@@ -76,14 +77,17 @@ class _HomePageState extends State<HomePage> {
   ];
   List detectedControllerTypes = [];
   String activeController = "";
-  bool zeroBased = false;
-  bool searchActive = false;
-
   bool listLoaded = false;
 
+  //Filters and search variables
+  bool searchActive = false;
   String searchString = "";
   String dataTypeFilter = "";
   String functionGroupFilter = "";
+
+  //Setting variables
+  bool zeroBased = false;
+  bool tagvalueInCustomField2 = false;
 
   void _resetFiltersAndSearch() {
     searchString = "";
@@ -104,11 +108,6 @@ class _HomePageState extends State<HomePage> {
     protocolPrefixes = {};
     listLoaded = false;
     _resetFiltersAndSearch();
-    setState(() {});
-  }
-
-  void _toggleZeroOneBased() {
-    zeroBased = !zeroBased;
     setState(() {});
   }
 
@@ -393,15 +392,18 @@ class _HomePageState extends State<HomePage> {
             title: const Text("File"),
             children: [
               ListTile(
+                dense: true,
                 onTap: () => _openFile(),
                 title: const Text("Open file (xlsx or json)"),
               ),
               ListTile(
-                onTap: () => _saveAsJson(),
+                dense: true,
+                onTap: listLoaded ? () => _saveAsJson() : null,
                 title: const Text("Save as Json"),
               ),
               ListTile(
-                onTap: () => _closeCurrentSetup(),
+                dense: true,
+                onTap: listLoaded ? () => _closeCurrentSetup() : null,
                 title: const Text("Close"),
               ),
             ],
@@ -413,10 +415,25 @@ class _HomePageState extends State<HomePage> {
             title: const Text("Settings"),
             children: [
               ListTile(
-                title: const Text("Zero-based"),
+                dense: true,
+                title: const Text(
+                  "Zero-based",
+                  //style: TextStyle(fontSize: 14),
+                ),
                 trailing: Switch(
                     value: zeroBased,
                     onChanged: (value) => setState(() => zeroBased = value)),
+              ),
+              ListTile(
+                dense: true,
+                title: const Text(
+                  "Value of tag in Custom Field 2 (Alarms)",
+                  // style: TextStyle(fontSize: 14),
+                ),
+                trailing: Switch(
+                    value: tagvalueInCustomField2,
+                    onChanged: (value) =>
+                        setState(() => tagvalueInCustomField2 = value)),
               ),
             ],
           ),
@@ -716,7 +733,6 @@ class _HomePageState extends State<HomePage> {
                                   ],
                                 ),
                               ),
-
                               /*
                               alarmIsCopied
                                   ? SizedBox(
@@ -765,14 +781,6 @@ class _HomePageState extends State<HomePage> {
                           .entries
                           .map((e) => Text("${e.key}: ${e.value}"))
                           .toList(),
-
-                      /*[
-                        Text(
-                            "Selected tags: ${tags.where((element) => element.selected).length}"),
-                        Text(
-                            "Selected tags with alarm: ${tags.where((element) => element.selected && element.alarm.isActive).length}"),
-                        Text("Tags in current view: ${visibleTags.length}")
-                      ],*/
                     ),
                   ),
                 ),
@@ -792,16 +800,6 @@ Map createMapFromSheet(exc.Sheet sheet) {
       ..removeAt(0);
   }
   return sheetMap;
-}
-
-List indexFilter(Map map, String keyToFilter, var filter) {
-  List indexFilter = [];
-  for (var i = 0; i < map[keyToFilter]!.length; i++) {
-    if (map[keyToFilter]![i] == filter) {
-      indexFilter.add(i);
-    }
-  }
-  return indexFilter;
 }
 
 List<Tag> sheetmapToTags(Map sheetmap, List detectedControllerTypes) {
@@ -826,234 +824,4 @@ List<Tag> sheetmapToTags(Map sheetmap, List detectedControllerTypes) {
         Alarm.empty()));
   }
   return tags;
-}
-
-List<SizedBox> editableFields(BuildContext context, Map fields) {
-  List<SizedBox> textFormFields = [];
-  for (var i = 0; i < fields.length; i++) {
-    textFormFields.add(SizedBox(
-      width: 100,
-      child: TextFormField(
-        keyboardType: fields.values.elementAt(i).runtimeType == double
-            ? TextInputType.number
-            : null,
-        initialValue: fields.values.elementAt(i).toString(),
-        decoration: InputDecoration(
-            labelText: fields.keys.elementAt(i).toString(),
-            isDense: true,
-            contentPadding: const EdgeInsets.all(4)),
-
-        //onTapOutside: (event) => print("tapped outside"),
-
-        onChanged: (value) {
-          if (fields.values.elementAt(i).runtimeType == double) {
-            try {
-              fields[fields.keys.elementAt(i)] = double.parse(value);
-            } catch (e) {
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(SnackBar(content: Text(e.toString())));
-            }
-          }
-          if (fields.values.elementAt(i).runtimeType == String) {
-            fields[fields.keys.elementAt(i)] = value;
-          }
-        },
-      ),
-    ));
-  }
-  return textFormFields;
-}
-
-class AlarmEditor extends StatefulWidget {
-  AlarmEditor({super.key, required this.tag, required this.onCopyToAll});
-  Tag tag;
-  Function onCopyToAll;
-  @override
-  State<AlarmEditor> createState() => _AlarmEditorState();
-}
-
-class _AlarmEditorState extends State<AlarmEditor> {
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 150,
-          child: DropdownButton<String>(
-            isDense: true,
-            padding: EdgeInsets.zero,
-            value: widget.tag.alarm.alarmType,
-            onChanged: (value) {
-              FocusScope.of(context).unfocus();
-              widget.tag.alarm.alarmType = value!;
-              setState(() {});
-            },
-            items: const [
-              DropdownMenuItem(
-                value: "limitAlarm",
-                child: Text("Limit Alarm"),
-              ),
-              DropdownMenuItem(
-                value: "bitMaskAlarm",
-                child: Text("Bit Mask Alarm"),
-              ),
-              DropdownMenuItem(
-                value: "deviationAlarm",
-                child: Text("Deviation Alarm"),
-              ),
-              DropdownMenuItem(
-                value: "valueAlarm",
-                child: Text("Value Alarm"),
-              ),
-            ],
-          ),
-        ),
-        ...switch (widget.tag.alarm.alarmType) {
-          "limitAlarm" => [
-              SizedBox(
-                width: 100,
-                child: TextFormField(
-                    keyboardType: TextInputType.number,
-                    initialValue: widget.tag.alarm.minLimit.toString(),
-                    decoration: const InputDecoration(
-                        labelText: "Min limit",
-                        isDense: true,
-                        contentPadding: EdgeInsets.all(4)),
-
-                    //onTapOutside: (event) => print("tapped outside"),
-
-                    onChanged: (value) {
-                      try {
-                        widget.tag.alarm.minLimit = double.parse(value);
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(e.toString())));
-                      }
-                    }),
-              ),
-              SizedBox(
-                width: 100,
-                child: TextFormField(
-                    keyboardType: TextInputType.number,
-                    initialValue: widget.tag.alarm.maxLimit.toString(),
-                    decoration: const InputDecoration(
-                        labelText: "Max limit",
-                        isDense: true,
-                        contentPadding: EdgeInsets.all(4)),
-                    onChanged: (value) {
-                      try {
-                        widget.tag.alarm.maxLimit = double.parse(value);
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(e.toString())));
-                      }
-                    }),
-              ),
-            ],
-          "bitMaskAlarm" => [
-              SizedBox(
-                width: 150,
-                child: TextFormField(
-                    keyboardType: TextInputType.number,
-                    initialValue: widget.tag.alarm.bitPositions.toString(),
-                    decoration: const InputDecoration(
-                        labelText: "Bit positions",
-                        isDense: true,
-                        contentPadding: EdgeInsets.all(4)),
-                    onChanged: (value) {
-                      try {
-                        widget.tag.alarm.bitPositions = value;
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(e.toString())));
-                      }
-                    }),
-              ),
-            ],
-          "deviationAlarm" => [
-              SizedBox(
-                width: 100,
-                child: TextFormField(
-                    keyboardType: TextInputType.number,
-                    initialValue: widget.tag.alarm.setpoint.toString(),
-                    decoration: const InputDecoration(
-                        labelText: "Setpoint",
-                        isDense: true,
-                        contentPadding: EdgeInsets.all(4)),
-                    onChanged: (value) {
-                      try {
-                        widget.tag.alarm.setpoint = double.parse(value);
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(e.toString())));
-                      }
-                    }),
-              ),
-              SizedBox(
-                width: 100,
-                child: TextFormField(
-                    keyboardType: TextInputType.number,
-                    initialValue: widget.tag.alarm.deviation.toString(),
-                    decoration: const InputDecoration(
-                        labelText: "Deviation %",
-                        isDense: true,
-                        contentPadding: EdgeInsets.all(4)),
-                    onChanged: (value) {
-                      try {
-                        widget.tag.alarm.deviation = double.parse(value);
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(e.toString())));
-                      }
-                    }),
-              ),
-            ],
-          "valueAlarm" => [
-              SizedBox(
-                width: 100,
-                child: TextFormField(
-                    keyboardType: TextInputType.number,
-                    initialValue: widget.tag.alarm.value.toString(),
-                    decoration: const InputDecoration(
-                        labelText: "Value",
-                        isDense: true,
-                        contentPadding: EdgeInsets.all(4)),
-                    onChanged: (value) {
-                      try {
-                        widget.tag.alarm.value = double.parse(value);
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(e.toString())));
-                      }
-                    }),
-              ),
-            ],
-          String() => [],
-        },
-        GestureDetector(
-            onTapDown: (details) => showMenu(
-                    context: context,
-                    position: RelativeRect.fromLTRB(
-                        details.globalPosition.dx,
-                        details.globalPosition.dy,
-                        details.globalPosition.dx,
-                        details.globalPosition.dy),
-                    items: [
-                      PopupMenuItem(
-                          value: widget.onCopyToAll,
-                          child:
-                              const Text("Copy alarm to all in current list"))
-                    ]).then(
-                  (value) {
-                    if (value == null) {
-                      return;
-                    } else {
-                      value(widget.tag.alarm);
-                    }
-                  },
-                ),
-            child: const Icon(Icons.more_horiz))
-      ],
-    );
-  }
 }
