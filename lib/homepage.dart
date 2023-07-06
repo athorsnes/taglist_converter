@@ -401,7 +401,7 @@ class _HomePageState extends State<HomePage> {
               ListTile(
                 dense: true,
                 onTap: tagListLoaded ? () => _saveAsJson() : null,
-                title: const Text("Save as Json"),
+                title: const Text("Save as json"),
               ),
               ListTile(
                 dense: true,
@@ -559,11 +559,14 @@ class _HomePageState extends State<HomePage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextButton(
-                      onPressed: () => _openFile(),
-                      child: const Icon(Icons.folder_open)),
+                  Tooltip(
+                    message: "Open file",
+                    child: TextButton(
+                        onPressed: () => _openFile(),
+                        child: const Icon(Icons.folder_open)),
+                  ),
                   const Text(
-                      "Start by opening a DEIF modbuslist in excel format, or a previously saved setup."),
+                      "Start by opening a DEIF modbuslist in xlsx format, or a previously saved setup in json format."),
                   const Text("Modbuslists can be found on DEIFs webpage"),
                   TextButton(
                       onPressed: () => _launchUrl("https://www.deif.com"),
@@ -778,7 +781,7 @@ class _HomePageState extends State<HomePage> {
                             .length,
                         "Tags in current view": visibleTags.length,
                         "Current filters":
-                            "$dataTypeFilter $functionGroupFilter"
+                            "$functionGroupFilter $dataTypeFilter"
                       }
                           .entries
                           .map((e) => Text("${e.key}: ${e.value}"))

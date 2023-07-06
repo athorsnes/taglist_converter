@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import '../classes/tag.dart';
 
 String xmlTagString(List<Tag> tags, bool isZeroBased) {
@@ -175,14 +177,49 @@ String alarmStringXML(
         tagValue = "[$tagname]";
       }
       //alarmname = alarmname.replaceAll(RegExp(r'[,./!?:"]'), '_');
+      String alarmParameters = "";
+      switch (tag.alarm.alarmType) {
+        case "limitAlarm":
+          alarmParameters = '''
+  <lowLimit>${tag.alarm.minLimit}</lowLimit>
+  <highLimit>${tag.alarm.maxLimit}</highLimit>
+  ''';
+          break;
+        case "valueAlarm":
+          alarmParameters = '''
+  <value>${tag.alarm.value}</value>''';
+          break;
+        case "deviationAlarm":
+          alarmParameters = '''
+  <deviation>${tag.alarm.deviation}</deviation>
+  <setPoint>${tag.alarm.setpoint}</setPoint>''';
+          break;
+        case "bitMaskAlarm":
+          String bitMask = "";
+
+          List bitPosList = tag.alarm.bitPositions.split(",");
+          int bitMaskValue = 0;
+          for (String bitPosition in bitPosList) {
+            int posValue = pow(2, int.parse(bitPosition)).toInt();
+            bitMaskValue += posValue;
+          }
+          bitMask = bitMaskValue.toRadixString(16);
+
+          alarmParameters = '''
+  <bitMask>$bitMask</bitMask>''';
+          break;
+
+        default:
+          print("Alarm type not supported${tag.alarm.alarmType}");
+      }
+
       String text = '''
 <alarm eventBuffer="AlarmBuffer1" logToEventArchive="true" eventType="14" subType="1" storeAlarmInfo="true">
   <name>Alarm_${prefix.key}_$i</name>
   <groups></groups>
   <source>$tagname</source>
   <alarmType>${tag.alarm.alarmType}</alarmType>
-  <lowLimit>${tag.alarm.minLimit}</lowLimit>
-  <highLimit>${tag.alarm.maxLimit}</highLimit>
+  $alarmParameters
   <enableTag></enableTag>
   <remoteAck></remoteAck>
   <ackNotify></ackNotify>
