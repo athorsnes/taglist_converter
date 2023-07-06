@@ -149,7 +149,8 @@ String xmlTagString(List<Tag> tags, bool isZeroBased) {
   return myXmlString + xmlEnd;
 }
 
-String alarmStringXML(Map protocolPrefixes, List<Tag> tags) {
+String alarmStringXML(
+    Map protocolPrefixes, List<Tag> tags, bool tagvalueInCustomField) {
   String myXmlString = "<alarms>\n\t";
   String xmlEnd = "</alarms>";
   for (var prefix in protocolPrefixes.entries) {
@@ -169,6 +170,10 @@ String alarmStringXML(Map protocolPrefixes, List<Tag> tags) {
 
       tagname += " -${tag.functionCode}";
       String alarmname = tagname.split('-F').first;
+      String tagValue = "";
+      if (tagvalueInCustomField) {
+        tagValue = "[$tagname]";
+      }
       //alarmname = alarmname.replaceAll(RegExp(r'[,./!?:"]'), '_');
       String text = '''
 <alarm eventBuffer="AlarmBuffer1" logToEventArchive="true" eventType="14" subType="1" storeAlarmInfo="true">
@@ -193,7 +198,7 @@ String alarmStringXML(Map protocolPrefixes, List<Tag> tags) {
   <printMask>1</printMask>
   <customFields>
     <customField_1>
-      <L1 langName="Lang1">[$tagname]</L1>
+      <L1 langName="Lang1">$tagValue</L1>
     </customField_1>
     <customField_2>
       <L1 langName="Lang1">$alarmname</L1>

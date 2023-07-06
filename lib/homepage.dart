@@ -18,6 +18,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  //General variables
   final Map<String, String> deifLinks = {
     "AGC-4 MKII":
         "https://deif-cdn-umbraco.azureedge.net/media/shjn54mw/agc-4-mk-ii-modbus-tables-4189341272-uk.xlsx",
@@ -37,19 +38,7 @@ class _HomePageState extends State<HomePage> {
         "https://deif-cdn-umbraco.azureedge.net/media/wfcn3snq/ppu-300-modbus-tables-4189341101-uk.xlsx",
   };
 
-  List<Tag> tags = [];
-  List functionGroups = [];
-  List dataTypes = [];
-  Map filterValues = {
-    "Function groups": [],
-    "Data types": [],
-  };
-
-  Alarm alarmToCopy = Alarm.empty();
-  bool alarmIsCopied = false;
-  Map<String, String> protocolPrefixes = {};
-
-  Map<String, double> columns = {
+  final Map<String, double> columns = {
     "Function group": 180.0,
     "PLC address": 130.0,
     "Bit": 60.0,
@@ -58,7 +47,15 @@ class _HomePageState extends State<HomePage> {
     "Alarm": 420.0,
   };
 
-  List possibleControllerTypes = [
+  List<Tag> tags = [];
+  Map filterValues = {
+    "Function groups": [],
+    "Data types": [],
+  };
+
+  Map<String, String> protocolPrefixes = {};
+
+  final List possibleControllerTypes = [
     "DG",
     "SG",
     "SC",
@@ -75,9 +72,10 @@ class _HomePageState extends State<HomePage> {
     "BATT",
     "_1",
   ];
+
   List detectedControllerTypes = [];
   String activeController = "";
-  bool listLoaded = false;
+  bool tagListLoaded = false;
 
   //Filters and search variables
   bool searchActive = false;
@@ -87,7 +85,11 @@ class _HomePageState extends State<HomePage> {
 
   //Setting variables
   bool zeroBased = false;
-  bool tagvalueInCustomField2 = false;
+  bool tagvalueInCustomField = false;
+
+  //Copy alarm variables
+  Alarm alarmToCopy = Alarm.empty();
+  bool alarmIsCopied = false;
 
   void _resetFiltersAndSearch() {
     searchString = "";
@@ -99,14 +101,12 @@ class _HomePageState extends State<HomePage> {
     detectedControllerTypes = [];
     activeController = "";
     tags = [];
-    functionGroups = [];
-    dataTypes = [];
     filterValues = {
       "Function groups": [],
       "Data types": [],
     };
     protocolPrefixes = {};
-    listLoaded = false;
+    tagListLoaded = false;
     _resetFiltersAndSearch();
     setState(() {});
   }
@@ -183,7 +183,7 @@ class _HomePageState extends State<HomePage> {
         filterValues["Data types"].add(tag.dataType);
       }
     }
-    listLoaded = true;
+    tagListLoaded = true;
     setState(() {});
   }
 
@@ -230,7 +230,7 @@ class _HomePageState extends State<HomePage> {
     }
 
     activeController = detectedControllerTypes[0];
-    listLoaded = true;
+    tagListLoaded = true;
     setState(() {});
   }
 
@@ -273,7 +273,9 @@ class _HomePageState extends State<HomePage> {
       File alarmFile = File("$result.xml");
 
       alarmFile.writeAsString(alarmStringXML(
-          protocolPrefixes, List<Tag>.from(tags.where((tag) => tag.selected))));
+          protocolPrefixes,
+          List<Tag>.from(tags.where((tag) => tag.selected)),
+          tagvalueInCustomField));
     }
   }
 
@@ -398,12 +400,12 @@ class _HomePageState extends State<HomePage> {
               ),
               ListTile(
                 dense: true,
-                onTap: listLoaded ? () => _saveAsJson() : null,
+                onTap: tagListLoaded ? () => _saveAsJson() : null,
                 title: const Text("Save as Json"),
               ),
               ListTile(
                 dense: true,
-                onTap: listLoaded ? () => _closeCurrentSetup() : null,
+                onTap: tagListLoaded ? () => _closeCurrentSetup() : null,
                 title: const Text("Close"),
               ),
             ],
@@ -431,9 +433,9 @@ class _HomePageState extends State<HomePage> {
                   // style: TextStyle(fontSize: 14),
                 ),
                 trailing: Switch(
-                    value: tagvalueInCustomField2,
+                    value: tagvalueInCustomField,
                     onChanged: (value) =>
-                        setState(() => tagvalueInCustomField2 = value)),
+                        setState(() => tagvalueInCustomField = value)),
               ),
             ],
           ),
@@ -524,7 +526,7 @@ class _HomePageState extends State<HomePage> {
             "Taglist converter",
           ),
           Expanded(child: Container()),
-          ...listLoaded
+          ...tagListLoaded
               ? {
                   ["Select all", Icons.check_box]: _selectAllVisible,
                   ["Deselect all", Icons.check_box_outline_blank]:
@@ -552,7 +554,7 @@ class _HomePageState extends State<HomePage> {
               : [],
         ]),
       ),
-      body: !listLoaded
+      body: !tagListLoaded
           ? Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
