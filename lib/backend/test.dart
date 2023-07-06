@@ -1,22 +1,25 @@
-//add subindex
+import 'dart:math';
 
-String xmlString(Map<String, List> map, bool isZeroBased) {
+import '../classes/tag.dart';
+
+String xmlTagString(List<Tag> tags, bool isZeroBased) {
   String myXmlString = "<tags>\n\t";
   String xmlEnd = "</tags>";
-  for (var i = 0; i < map["Controller function name"]!.length; i++) {
-    String tagname = map["Controller function name"]![i];
+
+  for (Tag tag in tags) {
+    String tagname = tag.name;
+    tagname = tagname.replaceAll('&', '&#38;');
     tagname = tagname.replaceAll('>', '&gt;');
     tagname = tagname.replaceAll('<', '&lt;');
     tagname = tagname.replaceAll('°', 'degrees');
     tagname = tagname.replaceAll('.', ',');
-    tagname = tagname.replaceAll('&', '&#38;');
-    tagname += " -${map["Function code"]![i]}";
+
+    tagname += " -${tag.functionCode}";
     String offset = isZeroBased
-        ? (int.parse(map["PLC address"]![i]) - 1).toString()
-        : map["PLC address"]![i];
-    String subindex =
-        map["Bit"]![i].toString().isNotEmpty ? map["Bit"]![i] : "";
-    String comment = map["Function group"]![i];
+        ? (int.parse(tag.plcAddress) - 1).toString()
+        : tag.plcAddress;
+    String subindex = tag.bit.toString().isNotEmpty ? tag.bit : "";
+    String comment = tag.functionGroup;
     String dataType = "";
     String memoryType = "";
     String readWriteAccess = "READ-WRITE";
@@ -24,7 +27,7 @@ String xmlString(Map<String, List> map, bool isZeroBased) {
     String maxVal = "";
     String minVal = "";
 
-    switch (map["Function group"]![i]) {
+    switch (tag.functionGroup) {
       case "Command flag" || "Control command":
         readWriteAccess = "WRITE";
         break;
@@ -36,7 +39,7 @@ String xmlString(Map<String, List> map, bool isZeroBased) {
         readWriteAccess = "READ-WRITE";
     }
 
-    switch (map["Function code"]![i]) {
+    switch (tag.functionCode) {
       case "F01":
         memoryType = "OUTP";
         break;
@@ -54,7 +57,7 @@ String xmlString(Map<String, List> map, bool isZeroBased) {
       default:
     }
 
-    switch (map["Data type"]![i]) {
+    switch (tag.dataType) {
       case "BOOL":
         dataType = "boolean";
         minVal = "0";
@@ -88,7 +91,6 @@ String xmlString(Map<String, List> map, bool isZeroBased) {
         maxVal = "3.40282e+38";
         break;
     }
-
     String xml = '''<tag>
   <name>$tagname</name>
   <group></group>
@@ -146,6 +148,137 @@ String xmlString(Map<String, List> map, bool isZeroBased) {
 
     myXmlString += xml;
   }
-  myXmlString += xmlEnd;
-  return myXmlString;
+  return myXmlString + xmlEnd;
+}
+
+String alarmStringXML(
+    Map protocolPrefixes, List<Tag> tags, bool tagvalueInCustomField) {
+  String myXmlString = "<alarms>\n\t";
+  String xmlEnd = "</alarms>";
+  for (var prefix in protocolPrefixes.entries) {
+    int i = 0;
+    for (Tag tag in tags.where((tag) =>
+        tag.alarm.isActive && tag.controllerTypes.contains(prefix.value))) {
+      String tagname = tag.name;
+      if (prefix.key != "") {
+        tagname = "${prefix.key}/${tag.name}";
+      }
+
+      tagname = tagname.replaceAll('&', '&#38;');
+      tagname = tagname.replaceAll('>', '&gt;');
+      tagname = tagname.replaceAll('<', '&lt;');
+      tagname = tagname.replaceAll('°', 'degrees');
+      tagname = tagname.replaceAll('.', ',');
+
+      tagname += " -${tag.functionCode}";
+      String alarmname = tagname.split('-F').first;
+      String tagValue = "";
+      if (tagvalueInCustomField) {
+        tagValue = "[$tagname]";
+      }
+      //alarmname = alarmname.replaceAll(RegExp(r'[,./!?:"]'), '_');
+      String alarmParameters = "";
+      switch (tag.alarm.alarmType) {
+        case "limitAlarm":
+          alarmParameters = '''
+  <lowLimit>${tag.alarm.minLimit}</lowLimit>
+  <highLimit>${tag.alarm.maxLimit}</highLimit>
+  ''';
+          break;
+        case "valueAlarm":
+          alarmParameters = '''
+  <value>${tag.alarm.value}</value>''';
+          break;
+        case "deviationAlarm":
+          alarmParameters = '''
+  <deviation>${tag.alarm.deviation}</deviation>
+  <setPoint>${tag.alarm.setpoint}</setPoint>''';
+          break;
+        case "bitMaskAlarm":
+          String bitMask = "";
+
+          List bitPosList = tag.alarm.bitPositions.split(",");
+          int bitMaskValue = 0;
+          for (String bitPosition in bitPosList) {
+            int posValue = pow(2, int.parse(bitPosition)).toInt();
+            bitMaskValue += posValue;
+          }
+          bitMask = bitMaskValue.toRadixString(16);
+
+          alarmParameters = '''
+  <bitMask>$bitMask</bitMask>''';
+          break;
+
+        default:
+          print("Alarm type not supported${tag.alarm.alarmType}");
+      }
+
+      String text = '''
+<alarm eventBuffer="AlarmBuffer1" logToEventArchive="true" eventType="14" subType="1" storeAlarmInfo="true">
+  <name>Alarm_${prefix.key}_$i</name>
+  <groups></groups>
+  <source>$tagname</source>
+  <alarmType>${tag.alarm.alarmType}</alarmType>
+  $alarmParameters
+  <enableTag></enableTag>
+  <remoteAck></remoteAck>
+  <ackNotify></ackNotify>
+  <enabled>true</enabled>
+  <requireAck>false</requireAck>
+  <blinkTxt>false</blinkTxt>
+  <requireReset>false</requireReset>
+  <severity>1</severity>
+  <priority>3</priority>
+  <logMask>76</logMask>
+  <notifyMask>76</notifyMask>
+  <actionMask>1</actionMask>
+  <printMask>1</printMask>
+  <customFields>
+    <customField_1>
+      <L1 langName="Lang1">$tagValue</L1>
+    </customField_1>
+    <customField_2>
+      <L1 langName="Lang1">$alarmname</L1>
+    </customField_2>
+  </customFields>
+  <colors>
+    <ackTxtColor>#ff0000</ackTxtColor>
+    <ackBgColor>#ffff00</ackBgColor>
+    <disabledTxtColor>#000000</disabledTxtColor>
+    <disabledBgColor>#ffffff</disabledBgColor>
+    <triggeredTxtColor>#000000</triggeredTxtColor>
+    <triggeredBgColor>#ffffff</triggeredBgColor>
+    <notTriggeredTxtColor>#000000</notTriggeredTxtColor>
+    <notTriggeredBgColor>#ffffff</notTriggeredBgColor>
+    <triggeredAckedTxtColor>#000000</triggeredAckedTxtColor>
+    <triggeredAckedBgColor>#ffffff</triggeredAckedBgColor>
+    <triggeredNotAckedTxtColor>#000000</triggeredNotAckedTxtColor>
+    <triggeredNotAckedBgColor>#ffffff</triggeredNotAckedBgColor>
+    <notTriggeredAckedTxtColor>#000000</notTriggeredAckedTxtColor>
+    <notTriggeredAckedBgColor>#ffffff</notTriggeredAckedBgColor>
+    <notTriggeredNotAckedTxtColor>#000000</notTriggeredNotAckedTxtColor>
+    <notTriggeredNotAckedBgColor>#ffffff</notTriggeredNotAckedBgColor>
+  </colors>
+  <actions>
+    <macroAction1>
+      <actionFunction>showDialog</actionFunction>
+      <actionID>5</actionID>
+      <actionType></actionType>
+      <supportML>false</supportML>
+      <parameters>alarm_alert.jmx</parameters>
+    </macroAction1>
+  </actions>
+  <useractions/>
+  <description>
+    <L1 langName="Lang1"></L1>
+  </description>
+  <enableAudit auditBuff="" subT="1" eventT="18">false</enableAudit>
+</alarm>
+''';
+      myXmlString += text;
+      i++;
+    }
+  }
+
+  return myXmlString + xmlEnd;
 }
