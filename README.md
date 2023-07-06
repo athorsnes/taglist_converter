@@ -49,6 +49,7 @@ When you have loaded a modbus list, or Json file, the following happens:
 
 ### Creating importable taglist
 ![Screenshot](/screenshots/export.jpg "Export section in menu")
+
 When you are done selecting tags and alarms, go to "export" in the menu to create importable taglist and alarmlist in XML format. 
 Upon opening a modbus list, the program automatically suggests units to create alarms for. These can be removed and new ones added.
 There can not be two units with the same prefix!
