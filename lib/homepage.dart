@@ -3,13 +3,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' as exc;
-import 'package:flutter/services.dart';
 import 'package:taglist_converter/backend/test.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'classes/alarm.dart';
 import 'classes/tag.dart';
 import 'widgets/alarm_editor.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:html' as webFile;
 
 class HomePage extends StatefulWidget {
   final PackageInfo packageInfo;
@@ -113,9 +114,9 @@ class _HomePageState extends State<HomePage> {
     setState(() {});
   }
 
-  void _readFromExcel(String path) {
+  void _readFromExcel(var bytes) {
     _closeCurrentSetup();
-    Uint8List bytes = File(path).readAsBytesSync();
+    //Uint8List bytes = File(path).readAsBytesSync();
     exc.Excel excel = exc.Excel.decodeBytes(bytes);
     List<exc.Sheet> sheets = excel.tables.values.toList()..removeAt(0);
 
@@ -218,9 +219,9 @@ class _HomePageState extends State<HomePage> {
     return false;
   }
 
-  Future<void> _readFromJson(String path) async {
+  Future<void> _readFromJson(var bytes) async {
     _closeCurrentSetup();
-    var bytes = File(path).readAsBytesSync();
+    //var bytes = File(path).readAsBytesSync();
     String jsonString = String.fromCharCodes(bytes);
     Map jsonMap = jsonDecode(jsonString);
 
@@ -243,27 +244,58 @@ class _HomePageState extends State<HomePage> {
         //allowedExtensions: ['xlsx', 'json'],
         );
     if (result != null) {
-      if (result.paths[0]?.split(".").last == "json") {
-        _readFromJson(result.paths[0]!);
+      if (kIsWeb) {
+        //print(result.files.first.bytes);
+        //_readFromJson(result.files.first.bytes);
+        if (result.files.first.extension == "xlsx") {
+          _readFromExcel(result.files.first.bytes);
+        } else if (result.files.first.extension == "json") {
+          _readFromJson(result.files.first.bytes);
+        }
       } else {
-        _readFromExcel(result.paths[0]!);
+        var bytes = File(result.paths.first!).readAsBytesSync();
+        if (result.paths[0]?.split(".").last == "json") {
+          _readFromJson(bytes);
+        } else {
+          _readFromExcel(bytes);
+        }
+
+        /*
+      */
       }
     }
   }
 
   //NEEDS work
   Future<void> _exportToTaglist(String controller) async {
-    final result = await FilePicker.platform.saveFile(
-      type: FileType.custom,
-      allowedExtensions: ['xml'],
-    );
-    if (result != null) {
-      File file = File("$result.xml");
+    if (kIsWeb) {
+      String outputName = "taglist_${controller}.xml";
+      var blob = webFile.Blob([
+        xmlTagString(
+            List<Tag>.from(tags.where((tag) =>
+                tag.selected && tag.controllerTypes.contains(controller))),
+            zeroBased)
+      ], 'xml', 'native');
 
-      file.writeAsString(xmlTagString(
-          List<Tag>.from(tags.where((tag) =>
-              tag.selected && tag.controllerTypes.contains(controller))),
-          zeroBased));
+      webFile.AnchorElement(
+        href: webFile.Url.createObjectUrlFromBlob(blob).toString(),
+      )
+        ..setAttribute("download", outputName)
+        ..click();
+      return;
+    } else {
+      final result = await FilePicker.platform.saveFile(
+        type: FileType.custom,
+        allowedExtensions: ['xml'],
+      );
+      if (result != null) {
+        File file = File("$result.xml");
+
+        file.writeAsString(xmlTagString(
+            List<Tag>.from(tags.where((tag) =>
+                tag.selected && tag.controllerTypes.contains(controller))),
+            zeroBased));
+      }
     }
   }
 
