@@ -9,7 +9,6 @@ import 'classes/alarm.dart';
 import 'classes/tag.dart';
 import 'widgets/alarm_editor.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:html' as webFile;
 
 class HomePage extends StatefulWidget {
@@ -238,80 +237,46 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openFile() async {
-    final result = await FilePicker.platform.pickFiles(
-        //allowMultiple: true,
-        //type: FileType.custom,
-        //allowedExtensions: ['xlsx', 'json'],
-        );
+    final result = await FilePicker.platform.pickFiles();
     if (result != null) {
-      if (kIsWeb) {
-        //print(result.files.first.bytes);
-        //_readFromJson(result.files.first.bytes);
-        if (result.files.first.extension == "xlsx") {
-          _readFromExcel(result.files.first.bytes);
-        } else if (result.files.first.extension == "json") {
-          _readFromJson(result.files.first.bytes);
-        }
-      } else {
-        var bytes = File(result.paths.first!).readAsBytesSync();
-        if (result.paths[0]?.split(".").last == "json") {
-          _readFromJson(bytes);
-        } else {
-          _readFromExcel(bytes);
-        }
-
-        /*
-      */
+      if (result.files.first.extension == "xlsx") {
+        _readFromExcel(result.files.first.bytes);
+      } else if (result.files.first.extension == "json") {
+        _readFromJson(result.files.first.bytes);
       }
     }
   }
 
-  //NEEDS work
   Future<void> _exportToTaglist(String controller) async {
-    if (kIsWeb) {
-      String outputName = "taglist_${controller}.xml";
-      var blob = webFile.Blob([
-        xmlTagString(
-            List<Tag>.from(tags.where((tag) =>
-                tag.selected && tag.controllerTypes.contains(controller))),
-            zeroBased)
-      ], 'xml', 'native');
+    String outputName = "taglist_${controller}.xml";
+    var blob = webFile.Blob([
+      xmlTagString(
+          List<Tag>.from(tags.where((tag) =>
+              tag.selected && tag.controllerTypes.contains(controller))),
+          zeroBased)
+    ], 'xml', 'native');
 
-      webFile.AnchorElement(
-        href: webFile.Url.createObjectUrlFromBlob(blob).toString(),
-      )
-        ..setAttribute("download", outputName)
-        ..click();
-      return;
-    } else {
-      final result = await FilePicker.platform.saveFile(
-        type: FileType.custom,
-        allowedExtensions: ['xml'],
-      );
-      if (result != null) {
-        File file = File("$result.xml");
-
-        file.writeAsString(xmlTagString(
-            List<Tag>.from(tags.where((tag) =>
-                tag.selected && tag.controllerTypes.contains(controller))),
-            zeroBased));
-      }
-    }
+    webFile.AnchorElement(
+      href: webFile.Url.createObjectUrlFromBlob(blob).toString(),
+    )
+      ..setAttribute("download", outputName)
+      ..click();
   }
 
   Future<void> _exportToAlarmList() async {
-    final result = await FilePicker.platform.saveFile(
-      type: FileType.custom,
-      allowedExtensions: ['xml'],
-    );
-    if (result != null) {
-      File alarmFile = File("$result.xml");
-
-      alarmFile.writeAsString(alarmStringXML(
+    String outputName = "Alarmlist_${protocolPrefixes.keys.toString()}.xml";
+    var blob = webFile.Blob([
+      alarmStringXML(
           protocolPrefixes,
           List<Tag>.from(tags.where((tag) => tag.selected)),
-          tagvalueInCustomField));
-    }
+          tagvalueInCustomField)
+    ], 'xml', 'native');
+
+    webFile.AnchorElement(
+      href: webFile.Url.createObjectUrlFromBlob(blob).toString(),
+    )
+      ..setAttribute("download", outputName)
+      ..click();
   }
 
   Future<void> _launchUrl(String url) async {
