@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' as exc;
@@ -9,7 +8,7 @@ import 'classes/alarm.dart';
 import 'classes/tag.dart';
 import 'widgets/alarm_editor.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'dart:html' as webFile;
+import 'dart:html' as webfile;
 
 class HomePage extends StatefulWidget {
   final PackageInfo packageInfo;
@@ -190,31 +189,24 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<bool> _saveAsJson() async {
-    final result = await FilePicker.platform.saveFile(
-      type: FileType.custom,
-      allowedExtensions: ['json'],
-    );
-    if (result != null) {
-      File file = File("$result.json");
-      List jsonTags = [];
-      for (Tag tag in tags) {
-        jsonTags.add(tag.toJsonMap());
-      }
-      Map finalMap = {
-        "Detected controllers": detectedControllerTypes,
-        "Filter values": filterValues,
-        "Tags": jsonTags,
-      };
-      try {
-        file.writeAsString(jsonEncode(finalMap));
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text("Setup saved")));
-        return true;
-      } catch (e) {
-        print(e);
-        return false;
-      }
+    String outputName = "mySetup.json";
+    List jsonTags = [];
+    for (Tag tag in tags) {
+      jsonTags.add(tag.toJsonMap());
     }
+    Map finalMap = {
+      "Detected controllers": detectedControllerTypes,
+      "Filter values": filterValues,
+      "Tags": jsonTags,
+    };
+    var blob = webfile.Blob([jsonEncode(finalMap)], 'xml', 'native');
+
+    webfile.AnchorElement(
+      href: webfile.Url.createObjectUrlFromBlob(blob).toString(),
+    )
+      ..setAttribute("download", outputName)
+      ..click();
+
     return false;
   }
 
@@ -249,15 +241,15 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _exportToTaglist(String controller) async {
     String outputName = "taglist_${controller}.xml";
-    var blob = webFile.Blob([
+    var blob = webfile.Blob([
       xmlTagString(
           List<Tag>.from(tags.where((tag) =>
               tag.selected && tag.controllerTypes.contains(controller))),
           zeroBased)
     ], 'xml', 'native');
 
-    webFile.AnchorElement(
-      href: webFile.Url.createObjectUrlFromBlob(blob).toString(),
+    webfile.AnchorElement(
+      href: webfile.Url.createObjectUrlFromBlob(blob).toString(),
     )
       ..setAttribute("download", outputName)
       ..click();
@@ -265,15 +257,15 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _exportToAlarmList() async {
     String outputName = "Alarmlist_${protocolPrefixes.keys.toString()}.xml";
-    var blob = webFile.Blob([
+    var blob = webfile.Blob([
       alarmStringXML(
           protocolPrefixes,
           List<Tag>.from(tags.where((tag) => tag.selected)),
           tagvalueInCustomField)
     ], 'xml', 'native');
 
-    webFile.AnchorElement(
-      href: webFile.Url.createObjectUrlFromBlob(blob).toString(),
+    webfile.AnchorElement(
+      href: webfile.Url.createObjectUrlFromBlob(blob).toString(),
     )
       ..setAttribute("download", outputName)
       ..click();
