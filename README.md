@@ -30,13 +30,17 @@ When the application has started, you can use the buttons to download modbuslist
 ![Screenshot](/screenshots/menu.jpg "Menu")
 
 In the menu, you can
-+ Open a modbus list. Must be xlsx format (default from DEIF).
-+ Save or load setup to/from Json file. The Json file will hold the info of tags you have selected, so they are good for saving custom setups.
++ Open a DEIF modbus list in xlsx format or a previosly saved setup in json format.
++ Save the current setup.
++ Adjust settings.
+++ Zero-based adjusts the address by -1.
+++ Value of tag in Custom Field (Alarms), adds the value of the triggering tag in Custom field in the alarm list. This allows for setting colors depending on state if you are using "Alarm status : alarm state" tags as alarms for ML 300.
 + Close the open setup, to get back to the start page.
-+ Toggle between 0- and 1-based modbus communication. Default is 1-based.
++ Export taglists and alarmlists
 
 
-### Selecting tags
+
+### Selecting tags and alarms
 ![Screenshot](/screenshots/loaded.jpg "After loading a modbus-list")
 
 When you have loaded a modbus list, or Json file, the following happens:
@@ -47,7 +51,7 @@ When you have loaded a modbus list, or Json file, the following happens:
 + You can search in "Controller function name". This search is applied in addition the any active filter. 
 + You can use the buttons next to "Selected" to select or deselect all tags currently in the list.
 
-### Creating importable taglist
+### Generating importable lists
 ![Screenshot](/screenshots/export.jpg "Export section in menu")
 
 When you are done selecting tags and alarms, go to "export" in the menu to create importable taglist and alarmlist in XML format. 

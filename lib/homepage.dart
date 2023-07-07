@@ -9,9 +9,11 @@ import 'package:url_launcher/url_launcher.dart';
 import 'classes/alarm.dart';
 import 'classes/tag.dart';
 import 'widgets/alarm_editor.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({Key? key}) : super(key: key);
+  final PackageInfo packageInfo;
+  const HomePage({Key? key, required this.packageInfo}) : super(key: key);
 
   @override
   _HomePageState createState() => _HomePageState();
@@ -236,9 +238,10 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _openFile() async {
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['xlsx', 'json'],
-    );
+        //allowMultiple: true,
+        //type: FileType.custom,
+        //allowedExtensions: ['xlsx', 'json'],
+        );
     if (result != null) {
       if (result.paths[0]?.split(".").last == "json") {
         _readFromJson(result.paths[0]!);
@@ -515,6 +518,13 @@ class _HomePageState extends State<HomePage> {
                   : [const Text("Select some tags first")]
             ],
           ),
+          ExpansionTile(
+            title: Text("About"),
+            children: [
+              Text(widget.packageInfo.appName),
+              Text(widget.packageInfo.version),
+            ],
+          )
         ]),
       ),
       appBar: AppBar(
