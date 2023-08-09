@@ -75,12 +75,12 @@ String xmlTagString(List<Tag> tags, bool isZeroBased) {
         break;
 
       case "INT32" || "INT32s":
-        dataType = "int";
+        dataType = "int(swap4,swap2)";
         minVal = "-2.1e+9";
         maxVal = "2.1e+9";
         break;
       case "INT32u":
-        dataType = "unsignedInt";
+        dataType = "unsignedInt(swap4,swap2)";
         minVal = "0";
         maxVal = "4.2e+9";
         break;
@@ -90,6 +90,7 @@ String xmlTagString(List<Tag> tags, bool isZeroBased) {
             "-3.40282e+38"; //1.17e-38 in AGI user manual -3.40282e+38 in AGI Creator
         maxVal = "3.40282e+38";
         break;
+      // TODO(athorsnes): add data type "string"
     }
     String xml = '''<tag>
   <name>$tagname</name>

@@ -190,31 +190,35 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<bool> _saveAsJson() async {
-    final result = await FilePicker.platform.saveFile(
+    await FilePicker.platform.saveFile(
       type: FileType.custom,
       allowedExtensions: ['json'],
-    );
-    if (result != null) {
-      File file = File("$result.json");
-      List jsonTags = [];
-      for (Tag tag in tags) {
-        jsonTags.add(tag.toJsonMap());
+    ).then((result) {
+      if (result != null) {
+        Navigator.of(context).pop();
+        File file = File("$result.json");
+        List jsonTags = [];
+        for (Tag tag in tags) {
+          jsonTags.add(tag.toJsonMap());
+        }
+        Map finalMap = {
+          "Detected controllers": detectedControllerTypes,
+          "Filter values": filterValues,
+          "Tags": jsonTags,
+        };
+        try {
+          file.writeAsString(jsonEncode(finalMap)).then((value) =>
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(const SnackBar(content: Text("Setup saved"))));
+
+          return true;
+        } catch (e) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(e.toString())));
+          return false;
+        }
       }
-      Map finalMap = {
-        "Detected controllers": detectedControllerTypes,
-        "Filter values": filterValues,
-        "Tags": jsonTags,
-      };
-      try {
-        file.writeAsString(jsonEncode(finalMap));
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text("Setup saved")));
-        return true;
-      } catch (e) {
-        print(e);
-        return false;
-      }
-    }
+    });
     return false;
   }
 
@@ -238,10 +242,10 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _openFile() async {
     final result = await FilePicker.platform.pickFiles(
-        //allowMultiple: true,
-        //type: FileType.custom,
-        //allowedExtensions: ['xlsx', 'json'],
-        );
+      //allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: ['xlsx', 'json'],
+    );
     if (result != null) {
       if (result.paths[0]?.split(".").last == "json") {
         _readFromJson(result.paths[0]!);
@@ -362,8 +366,6 @@ class _HomePageState extends State<HomePage> {
     }
     setState(() {});
   }
-
-  //ExpansionTileController searchExpanseController = ExpansionTileController();
 
   @override
   Widget build(BuildContext context) {
@@ -519,10 +521,14 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
           ExpansionTile(
-            title: Text("About"),
+            title: const Text("About"),
             children: [
               Text(widget.packageInfo.appName),
               Text(widget.packageInfo.version),
+              TextButton(
+                  onPressed: () => _launchUrl(
+                      "https://github.com/athorsnes/taglist_converter#taglist_converter"),
+                  child: const Text("Readme on github"))
             ],
           )
         ]),
@@ -534,6 +540,10 @@ class _HomePageState extends State<HomePage> {
         title: Row(children: [
           const Text(
             "Taglist converter",
+          ),
+          Text(
+            " BETA ${widget.packageInfo.version}",
+            style: const TextStyle(fontSize: 12),
           ),
           Expanded(child: Container()),
           ...tagListLoaded
@@ -565,30 +575,52 @@ class _HomePageState extends State<HomePage> {
         ]),
       ),
       body: !tagListLoaded
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Tooltip(
-                    message: "Open file",
-                    child: TextButton(
-                        onPressed: () => _openFile(),
-                        child: const Icon(Icons.folder_open)),
+          ? Column(
+              children: [
+                Expanded(
+                  flex: 8,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Tooltip(
+                          message: "Open file",
+                          child: TextButton(
+                              onPressed: () => _openFile(),
+                              child: const Icon(
+                                Icons.file_open,
+                                size: 48,
+                              )),
+                        ),
+                        const SizedBox(
+                          height: 20,
+                        ),
+                        const Text(
+                            "Start by opening a DEIF modbuslist in xlsx format, or a previously saved setup in json format."),
+                      ],
+                    ),
                   ),
-                  const Text(
-                      "Start by opening a DEIF modbuslist in xlsx format, or a previously saved setup in json format."),
-                  const Text("Modbuslists can be found on DEIFs webpage"),
-                  TextButton(
-                      onPressed: () => _launchUrl("https://www.deif.com"),
-                      child: const Text("Go to DEIF webpage")),
-                  const Text("Or downloaded directly here:"),
-                  ...deifLinks.entries.map((e) {
-                    return TextButton(
-                        onPressed: () => _launchUrl(e.value),
-                        child: Text(e.key));
-                  }).toList(),
-                ],
-              ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    children: [
+                      const Text(
+                          "If you dont have a modbuslist, you can get them here:"),
+                      Wrap(
+                        children: deifLinks.entries.map((e) {
+                          return Tooltip(
+                            message: e.value,
+                            child: TextButton(
+                                onPressed: () => _launchUrl(e.value),
+                                child: Text(e.key)),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                )
+              ],
             )
           : Column(
               children: [
