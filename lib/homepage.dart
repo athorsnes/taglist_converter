@@ -508,10 +508,14 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
           ExpansionTile(
-            title: Text("About"),
+            title: const Text("About"),
             children: [
               Text(widget.packageInfo.appName),
               Text(widget.packageInfo.version),
+              TextButton(
+                  onPressed: () => _launchUrl(
+                      "https://github.com/athorsnes/taglist_converter#taglist_converter"),
+                  child: const Text("Readme on github"))
             ],
           )
         ]),
@@ -523,6 +527,10 @@ class _HomePageState extends State<HomePage> {
         title: Row(children: [
           const Text(
             "Taglist converter",
+          ),
+          Text(
+            " BETA ${widget.packageInfo.version}",
+            style: const TextStyle(fontSize: 12),
           ),
           Expanded(child: Container()),
           ...tagListLoaded
@@ -554,30 +562,52 @@ class _HomePageState extends State<HomePage> {
         ]),
       ),
       body: !tagListLoaded
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Tooltip(
-                    message: "Open file",
-                    child: TextButton(
-                        onPressed: () => _openFile(),
-                        child: const Icon(Icons.folder_open)),
+          ? Column(
+              children: [
+                Expanded(
+                  flex: 8,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Tooltip(
+                          message: "Open file",
+                          child: TextButton(
+                              onPressed: () => _openFile(),
+                              child: const Icon(
+                                Icons.file_open,
+                                size: 48,
+                              )),
+                        ),
+                        const SizedBox(
+                          height: 20,
+                        ),
+                        const Text(
+                            "Start by opening a DEIF modbuslist in xlsx format, or a previously saved setup in json format."),
+                      ],
+                    ),
                   ),
-                  const Text(
-                      "Start by opening a DEIF modbuslist in xlsx format, or a previously saved setup in json format."),
-                  const Text("Modbuslists can be found on DEIFs webpage"),
-                  TextButton(
-                      onPressed: () => _launchUrl("https://www.deif.com"),
-                      child: const Text("Go to DEIF webpage")),
-                  const Text("Or downloaded directly here:"),
-                  ...deifLinks.entries.map((e) {
-                    return TextButton(
-                        onPressed: () => _launchUrl(e.value),
-                        child: Text(e.key));
-                  }).toList(),
-                ],
-              ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    children: [
+                      const Text(
+                          "If you dont have a modbuslist, you can get them here:"),
+                      Wrap(
+                        children: deifLinks.entries.map((e) {
+                          return Tooltip(
+                            message: e.value,
+                            child: TextButton(
+                                onPressed: () => _launchUrl(e.value),
+                                child: Text(e.key)),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                )
+              ],
             )
           : Column(
               children: [
