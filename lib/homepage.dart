@@ -839,7 +839,7 @@ class _HomePageState extends State<HomePage> {
 
 Map createMapFromSheet(exc.Sheet sheet) {
   Map sheetMap = {};
-  for (var i = 0; i < sheet.maxCols; i++) {
+  for (var i = 0; i < sheet.maxColumns; i++) {
     sheetMap[sheet
         .cell(exc.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0))
         .value
